@@ -5,7 +5,8 @@ from __future__ import print_function
 from TensorMol.TFInstance import *
 from TensorMol.TensorMolData import *
 import numpy as np
-import math,pickle
+import cPickle as pickle
+import math
 import time
 import os.path
 if (HAS_TF):
@@ -66,7 +67,7 @@ class MolInstance(Instance):
 
 	def train(self, mxsteps, continue_training= False):
 		self.train_prepare(continue_training)
-		test_freq = 10
+		test_freq = PARAMS["test_freq"]
 		mini_test_loss = 100000000 # some big numbers
 		for step in  range (0, mxsteps):
 			self.train_step(step)
@@ -97,20 +98,26 @@ class MolInstance(Instance):
 
 class MolInstance_fc_classify(MolInstance):
 	def __init__(self, TData_,  Name_=None):
+		"""
+		Translation of the outputs to meaningful numbers is handled by the digester and Tensordata
+		"""
 		self.NetType = "fc_classify"
 		MolInstance.__init__(self, TData_,  Name_)
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+str(self.TData.order)+"_"+self.NetType
+		LOGGER.debug("Raised Instance: "+self.name)
 		self.train_dir = './networks/'+self.name
-		self.hidden1 = 200
-		self.hidden2 = 200
-		self.hidden3 = 200
+		self.hidden1 = PARAMS["hidden1"]
+		self.hidden2 = PARAMS["hidden2"]
+		self.hidden3 = PARAMS["hidden3"]
 		self.prob = None
-#		self.inshape = self.TData.scratch_inputs.shape[1]
 		self.correct = None
 		self.summary_op =None
 		self.summary_writer=None
 
-	def evaluation(self, output, labels):
+	def n_correct(self, output, labels):
+		"""
+		This should average over the classifier output.
+		"""
 		# For a classifier model, we can use the in_top_k Op.
 		# It returns a bool tensor with shape [batch_size] that is true for
 		# the examples where the label is in the top k (here k=1)
@@ -150,7 +157,7 @@ class MolInstance_fc_classify(MolInstance):
 		with tf.Graph().as_default(), tf.device('/job:localhost/replica:0/task:0/gpu:0'):
 			self.embeds_placeholder, self.labels_placeholder = self.placeholder_inputs(Ncase)
 			self.output = self.inference(self.embeds_placeholder, self.hidden1, self.hidden2, self.hidden3)
-			self.correct = self.evaluation(self.output, self.labels_placeholder)
+			self.correct = self.n_correct(self.output, self.labels_placeholder)
 			self.prob = self.justpreds(self.output)
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
@@ -226,11 +233,15 @@ class MolInstance_fc_classify(MolInstance):
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
 			try: # I think this may be broken
-				chkfiles = [x for x in os.listdir(self.train_dir) if (x.count('chk')>0 and x.count('meta')==0)]
-				if (len(chkfiles)>0):
-					most_recent_chk_file=chkfiles[0]
-					print("Restoring training from Checkpoint: ",most_recent_chk_file)
-					self.saver.restore(self.sess, self.train_dir+'/'+most_recent_chk_file)
+				metafiles = [x for x in os.listdir(self.train_dir) if (x.count('meta')>0)]
+				if (len(metafiles)>0):
+					most_recent_meta_file=metafiles[0]
+					LOGGER.info("Restoring training from Metafile: "+most_recent_meta_file)
+					#Set config to allow soft device placement for temporary fix to known issue with Tensorflow up to version 0.12 atleast - JEH
+					config = tf.ConfigProto(allow_soft_placement=True)
+					self.sess = tf.Session(config=config)
+					self.saver = tf.train.import_meta_graph(self.train_dir+'/'+most_recent_meta_file)
+					self.saver.restore(self.sess, tf.train.latest_checkpoint(self.train_dir))
 			except Exception as Ex:
 				print("Restore Failed",Ex)
 				pass
@@ -262,16 +273,15 @@ class MolInstance_fc_sqdiff(MolInstance):
 		self.NetType = "fc_sqdiff"
 		MolInstance.__init__(self, TData_,  Name_)
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+str(self.TData.order)+"_"+self.NetType
+		LOGGER.debug("Raised Instance: "+self.name)
 		self.train_dir = './networks/'+self.name
-		self.hidden1 = 500
-		self.hidden2 = 500
-		self.hidden3 = 500
+		self.hidden1 = PARAMS["hidden1"]
+		self.hidden2 = PARAMS["hidden2"]
+		self.hidden3 = PARAMS["hidden3"]
 		self.inshape = np.prod(self.TData.dig.eshape)
 		self.outshape = np.prod(self.TData.dig.lshape)
-#		self.inshape = self.TData.scratch_inputs.shape[1]
 		self.summary_op =None
 		self.summary_writer=None
-		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+str(self.TData.order)+"_"+self.NetType
 
 	def evaluate(self, eval_input):
 		# Check sanity of input
@@ -369,11 +379,15 @@ class MolInstance_fc_sqdiff(MolInstance):
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
 			try: # I think this may be broken
-				chkfiles = [x for x in os.listdir(self.train_dir) if (x.count('chk')>0 and x.count('meta')==0)]
-				if (len(chkfiles)>0):
-					most_recent_chk_file=chkfiles[0]
-					print("Restoring training from Checkpoint: ",most_recent_chk_file)
-					self.saver.restore(self.sess, self.train_dir+'/'+most_recent_chk_file)
+				metafiles = [x for x in os.listdir(self.train_dir) if (x.count('meta')>0)]
+				if (len(metafiles)>0):
+					most_recent_meta_file=metafiles[0]
+					LOGGER.info("Restoring training from Metafile: "+most_recent_meta_file)
+					#Set config to allow soft device placement for temporary fix to known issue with Tensorflow up to version 0.12 atleast - JEH
+					config = tf.ConfigProto(allow_soft_placement=True)
+					self.sess = tf.Session(config=config)
+					self.saver = tf.train.import_meta_graph(self.train_dir+'/'+most_recent_meta_file)
+					self.saver.restore(self.sess, tf.train.latest_checkpoint(self.train_dir))
 			except Exception as Ex:
 				print("Restore Failed",Ex)
 				pass
@@ -423,6 +437,7 @@ class MolInstance_fc_sqdiff_BP(MolInstance_fc_sqdiff):
 		self.NetType = "fc_sqdiff_BP"
 		MolInstance.__init__(self, TData_,  Name_)
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+str(self.TData.order)+"_"+self.NetType
+		LOGGER.debug("Raised Instance: "+self.name)
 		self.train_dir = './networks/'+self.name
 		self.learning_rate = 0.00001
 		self.momentum = 0.95
@@ -482,11 +497,15 @@ class MolInstance_fc_sqdiff_BP(MolInstance_fc_sqdiff):
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
 			try: # I think this may be broken
-				chkfiles = [x for x in os.listdir(self.train_dir) if (x.count('chk')>0 and x.count('meta')==0)]
-				if (len(chkfiles)>0):
-						most_recent_chk_file=chkfiles[0]
-						print("Restoring training from Checkpoint: ",most_recent_chk_file)
-						self.saver.restore(self.sess, self.train_dir+'/'+most_recent_chk_file)
+				metafiles = [x for x in os.listdir(self.train_dir) if (x.count('meta')>0)]
+				if (len(metafiles)>0):
+					most_recent_meta_file=metafiles[0]
+					LOGGER.info("Restoring training from Metafile: "+most_recent_meta_file)
+					#Set config to allow soft device placement for temporary fix to known issue with Tensorflow up to version 0.12 atleast - JEH
+					config = tf.ConfigProto(allow_soft_placement=True)
+					self.sess = tf.Session(config=config)
+					self.saver = tf.train.import_meta_graph(self.train_dir+'/'+most_recent_meta_file)
+					self.saver.restore(self.sess, tf.train.latest_checkpoint(self.train_dir))
 			except Exception as Ex:
 				print("Restore Failed",Ex)
 				pass
@@ -568,7 +587,7 @@ class MolInstance_fc_sqdiff_BP(MolInstance_fc_sqdiff):
 
 		Args:
 			batch_data: a list of numpy arrays containing inputs, bounds, matrices and desired energies in that order.
-			and placeholders to be assigned.
+			and placeholders to be assigned. (it can be longer than that c.f. TensorMolData_BP)
 
 		Returns:
 			Filled feed dictionary.
@@ -620,5 +639,5 @@ class MolInstance_fc_sqdiff_BP(MolInstance_fc_sqdiff):
 		preds, total_loss_value, loss_value = self.sess.run([self.output,self.total_loss, self.loss],  feed_dict=feed_dict)
 		duration = time.time() - test_start_time
 		self.print_training(step, test_loss, self.TData.NTest , duration)
-		self.TData.dig.EvaluateTestOutputs(batch_data[2],preds)
+		self.TData.dig.EvaluateTestOutputs(batch_data[2],preds,batch_data[3]) # Pass the matrices to truncate the output.
 		return test_loss, feed_dict

@@ -5,27 +5,33 @@
 from Mol import *
 from Util import *
 import numpy as np
-import os,sys,pickle,re,copy,time
+import os,sys,re,copy,time
+import cPickle as pickle
 
 class MSet:
 	""" A molecular database which
 		provides structures """
-	def __init__(self, name_ ="gdb9", path_="./datasets/"):
+	def __init__(self, name_ ="gdb9", path_="./datasets/", center_=True):
 		self.mols=[]
 		self.path=path_
 		self.name=name_
 		self.suffix=".pdb" #Pickle Database? Poor choice.
+		self.center=center_
 
-	def Save(self):
-		LOGGER.info("Saving set to: %s ", self.path+self.name+self.suffix)
+	def Save(self, filename=None):
+		if filename == None:
+			filename = self.name
+		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
 		#print "Saving set to: ", self.path+self.name+self.suffix
-		f=open(self.path+self.name+self.suffix,"wb")
-		pickle.dump(self.__dict__, f, protocol=1)
+		f=open(self.path+filename+self.suffix,"wb")
+		pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)
 		f.close()
 		return
 
-	def Load(self):
-		f = open(self.path+self.name+self.suffix,"rb")
+	def Load(self, filename=None):
+		if filename == None:
+			filename = self.name
+		f = open(self.path+filename+self.suffix,"rb")
 		tmp=pickle.load(f)
 		self.__dict__.update(tmp)
 		f.close()
@@ -56,6 +62,24 @@ class MSet:
 					s.mols[-1].DistMatrix = self.mols[j].DistMatrix
 		return s
 
+	def RotatedClone(self, NRots=3):
+		"""
+		Rotate every molecule NRots Times.
+		We should toss some reflections in the mix too...
+		"""
+		print "Making Rotated clone of:", self.name
+		s = MSet(self.name)
+		ord = range(len(self.mols))
+		if(random):
+			np.random.seed(int(time.time()))
+			ord=np.random.permutation(len(self.mols))
+		for j in ord:
+			for i in range (0, NRots):
+				s.mols.append(copy.deepcopy(self.mols[j]))
+				s.mols[-1].coords -= s.mols[-1].Center()
+				s.mols[-1].RotateRandomUniform()
+		return s
+
 	def DistortedClone(self, NDistorts=1, random=True):
 			''' Create a distorted copy of a set'''
 			print "Making distorted clone of:", self.name
@@ -70,15 +94,32 @@ class MSet:
 					s.mols[-1].Distort()
 			return s
 
-	def TransformedClone(self, transf_num):
+	def TransformedClone(self, transfs):
 		''' make a linearly transformed copy of a set. '''
-		print "Making distorted clone of:", self.name
-		s = MSet(self.name+"_transf_"+str(transf_num))
+		LOGGER.info("Making Transformed clone of:"+self.name)
+		s = MSet(self.name)
 		ord = range(len(self.mols))
 		for j in ord:
+			for k in range(len(transfs)):
 				s.mols.append(copy.deepcopy(self.mols[j]))
-				s.mols[-1].Transform(GRIDS.InvIsometries[transf_num])
+				s.mols[-1].Transform(transfs[k])
 		return s
+
+	def CenterSet(self):
+		"""
+		Translates every Mol such that the center is at 0.
+		"""
+		ord = range(len(self.mols))
+		for j in ord:
+			self.mols[j].coords -= self.mols[j].Center()
+
+	def EQ_forces(self):
+		"""
+		Sets forces to 0 for every molecule which has no forces
+		"""
+		ord = range(len(self.mols))
+		for j in ord:
+			self.mols[j].Set_EQ_force()
 
 	def NAtoms(self):
 		nat=0
@@ -92,8 +133,14 @@ class MSet:
 			types = np.union1d(types,m.AtomTypes())
 		return types
 
-	def ReadGDB9Unpacked(self, path="/Users/johnparkhill/gdb9/", has_force=False):
-		""" Reads the GDB9 dataset as a pickled list of molecules"""
+	def ReadXYZUnpacked(self, path="/Users/johnparkhill/gdb9/", has_energy=False, has_force=False):
+		"""
+		Reads XYZs in distinct files in one directory as a molset
+		Args:
+			path: the directory which contains the .xyz files to be read
+			has_energy: switch to turn on reading the energy from the comment line as formatted from the md_dataset on quantum-machine.org
+			has_force: switch to turn on reading the force from the comment line as formatted from the md_dataset on quantum-machine.org
+		"""
 		from os import listdir
 		from os.path import isfile, join
 		#onlyfiles = [f for f in listdir(path) if isfile(join(path, f))]
@@ -105,10 +152,16 @@ class MSet:
 			self.mols[-1].ReadGDB9(path+file, file, self.name)
 			if has_force:
 				self.mols[-1].Force_from_xyz(path+file)
+			if has_energy:
+				self.mols[-1].Energy_from_xyz(path+file)
+		if (self.center):
+			self.CenterSet()
 		return
 
-	def ReadXYZ(self,filename, xyz_type = 'mol'):
-		""" Reads XYZs concatenated into a single separated by \n\n file as a molset """
+	def ReadXYZ(self,filename = None, xyz_type = 'mol', eqforce=False):
+		""" Reads XYZs concatenated into a single file separated by \n\n as a molset """
+		if filename == None:
+			filename = self.name
 		f = open(self.path+filename+".xyz","r")
 		txts = f.readlines()
 		for line in range(len(txts)):
@@ -122,6 +175,10 @@ class MSet:
 				else:
 					raise Exception("Unknown Type!")
 				self.mols[-1].FromXYZString(''.join(txts[line0:line0+nlines+2]))
+		if (self.center):
+			self.CenterSet()
+		if (eqforce):
+			self.EQ_forces()
 		LOGGER.debug("Read "+str(len(self.mols))+" molecules from XYZ")
 		return
 
@@ -220,7 +277,7 @@ class MSet:
 		rmsd = np.zeros(len(ord))
 		n=0
 		for j in ord:
-			if (self.mols[j].properties["energy"] != None):
+			if ("energy" in self.mols[j].properties.keys()):
 				ens[n] = self.mols[j].properties["energy"]
 			else :
 				ens[n] = self.mols[j].GoEnergy(self.mols[j].coords.flatten())

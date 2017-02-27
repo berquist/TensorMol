@@ -1,19 +1,24 @@
 from Mol import *
 from Util import *
-import numpy,os,sys,pickle,re
+import numpy,os,sys,re
+import cPickle as pickle
+import LinearOperations
 if (HAS_EMB):
 	import MolEmb
 
 class Digester:
 	"""
 	 An Embedding gives some chemical description of a molecular
-	 Environment around a point
+	 Environment around a point. This one is for networks that will embed properties of atoms.
+	 Molecule embeddings and Behler-Parrinello are in DigestMol.
 
-	 A Digester samples a molecule using an embedding.# Because the embedding is evaluated so much, it's written in C. please refer to /C_API/setup.py
+	 A Digester samples a molecule using an embedding.
+	 Because the embedding is evaluated so much, it's written in C.
+	 please refer to /C_API/setup.py
 	 The Default is Coulomb, but this is also the gen. interface
 	 The embedding does not provide labels.
 	"""
-	def __init__(self, eles_, name_="GauSH", OType_="Disp", SamplingType_="", BlurRadius_ = 0.05 ):
+	def __init__(self, eles_, name_="GauSH", OType_="Disp"):
 		"""
 		Args:
 			eles_ : a list of elements in the Tensordata that I'll digest
@@ -27,9 +32,6 @@ class Digester:
 		self.eshape=None  #shape of an embedded case
 		self.lshape=None  #shape of the labels of an embedded case.
 		self.OType = OType_ # Output Type: HardP, SmoothP, StoP, Disp, Force, Energy etc. See Emb() for options.
-		self.SamplingType = "Smooth" # No hard cutoff of sampled points, random probabilites of distortion too.
-		if (SamplingType_ != ""):
-			self.SamplingType = SamplingType_
 
 		self.NTrainSamples=1 # Samples per atom. Should be made a parameter.
 		if (self.OType == "SmoothP" or self.OType == "Disp"):
@@ -38,14 +40,14 @@ class Digester:
 		self.eles = np.array(eles_)
 		self.eles.sort() # Consistent list of atoms in the order they are treated.
 		self.neles = len(eles_) # Consistent list of atoms in the order they are treated.
-		self.TrainSampDistance=2.0 #how far in Angs to sample on average.
-
-		self.ngrid = 20 #this is a shitty parameter if we go with anything other than RDF and should be replaced.
 		self.nsym = self.neles+(self.neles+1)*self.neles  # channel of sym functions
 		self.npgaussian = self.neles # channel of PGaussian
 		# Instead self.emb should know it's return shape or it should be testable.
-		self.lshape=None # shape of label array.
-		self.BlurRadius = BlurRadius_ # Stdev of gaussian used as prob of atom
+
+		self.SamplingType = PARAMS["dig_SamplingType"]
+		self.TrainSampDistance=2.0 #how far in Angs to sample on average.
+		self.ngrid = PARAMS["dig_ngrid"] #this is a shitty parameter if we go with anything other than RDF and should be replaced.
+		self.BlurRadius = PARAMS["BlurRadius"] # Stdev of gaussian used as prob of atom
 		self.SensRadius=6.0 # Distance which is used for input.
 
 		# These are used to normalize data.
@@ -58,20 +60,15 @@ class Digester:
 		self.Print()
 		return
 
-	def AssignNormalization(self,mn,sn):
-		self.MeanNorm=mn
-		self.StdNorm=sn
-		return
-
 	def Print(self):
-		print "-------------------- "
-		print "Digester Information "
-		print "self.name", self.name
-		print "self.OType", self.OType
-		print "self.SamplingType", self.SamplingType
-		print "self.NTrainSamples", self.NTrainSamples
-		print "self.TrainSampDistance", self.TrainSampDistance
-		print "-------------------- "
+		LOGGER.info("-------------------- ")
+		LOGGER.info("Digester Information ")
+		LOGGER.info("self.name: "+self.name)
+		LOGGER.info("self.OType: "+self.OType)
+		LOGGER.debug("self.NTrainSamples: "+str(self.NTrainSamples))
+		LOGGER.debug("self.TrainSampDistance: "+str(self.TrainSampDistance))
+		LOGGER.debug("self.OType: "+self.OType)
+		LOGGER.info("-------------------- ")
 		return
 
 	def MakeSamples_v2(self,point):    # with sampling function f(x)=M/(x+1)^2+N; f(0)=maxdisp,f(maxdisp)=0; when maxdisp =5.0, 38 % lie in (0, 0.1)
@@ -116,9 +113,9 @@ class Digester:
 		if (self.name=="Coulomb"):
 			Ins= MolEmb.Make_CM(mol_.coords, xyz_, mol_.atoms , self.eles ,  self.SensRadius, self.ngrid, at_, 0.0)
 		elif (self.name=="GauSH"):
-			Ins= MolEmb.Make_SH(mol_.coords, xyz_, mol_.atoms ,  self.SensRadius, self.ngrid, at_, 0.0)
+			Ins =  MolEmb.Make_SH(PARAMS, mol_.coords, mol_.atoms, at_);
 		elif (self.name=="GauInv"):
-			Ins= MolEmb.Make_Inv(mol_.coords, xyz_, mol_.atoms ,  self.SensRadius, at_)
+			Ins= MolEmb.Make_Inv(PARAMS, mol_.coords, mol_.atoms, at_)
 		elif (self.name=="RDF"):
 			Ins= MolEmb.Make_RDF(mol_.coords, xyz_, mol_.atoms , self.eles ,  self.SensRadius, self.ngrid, at_, 0.0)
 		elif (self.name=="SensoryBasis"):
@@ -141,26 +138,43 @@ class Digester:
 				Outs = mol_.GoDisp(at_)
 			elif (self.OType=="GoForce"):
 				Outs = mol_.GoForce(at_)
+			elif (self.OType=="GoForceSphere"):
+				Outs = mol_.GoForce(at_, 1) # See if the network is better at doing spherical=>spherical
 			elif (self.OType=="Force"):
 				if ( "forces" in mol_.properties):
 					if (at_<0):
 						Outs = mol_.properties['forces']
+						#print "Outs", Outs
 					else:
 						Outs = mol_.properties['forces'][at_].reshape((1,3))
 				else:
 					raise Exception("Mol Is missing force. ")
+			elif (self.OType=="ForceSphere"):
+				if ( "sphere_forces" in mol_.properties):
+					if (at_<0):
+						Outs = mol_.properties['sphere_forces']
+						#print "Outs", Outs
+					else:
+						Outs = mol_.properties['sphere_forces'][at_].reshape((1,3))
+				else:
+					raise Exception("Mol Is missing spherical force. ")
 			elif (self.OType=="StoP"):
 				ens_ = mol_.EnergiesOfAtomMoves(xyz_,at_)
 				if (ens_==None):
 					raise Exception("Empty energies...")
-				E0=np.min(ens_)
-				Es=ens_-E0
-				Boltz=np.exp(-1.0*Es/KAYBEETEE)
+				print ens_.min(), ens_.max()
+				Es=ens_-ens_.min()
+				Boltz=np.exp(-1.0*Es/PARAMS["KAYBEETEE"])
 				rnds = np.random.rand(len(xyz_))
 				Outs = np.array([1 if rnds[i]<Boltz[i] else 0 for i in range(len(ens_))])
 			elif (self.OType=="Energy"):
 				if ("energy" in mol_.properties):
 					ens_ = mol_.properties["energy"]
+				else:
+					raise Exception("Empty energies...")
+			elif (self.OType=="AtomizationEnergy"):
+				if ("atomization" in mol_.properties):
+					ens_ = mol_.properties["atomization"]
 				else:
 					raise Exception("Empty energies...")
 			elif (self.OType=="CalcEnergy"):
@@ -187,50 +201,6 @@ class Digester:
 		else:
 			return Ins
 
-	def unscld(self,a):
-	    return (a*self.StdNorm+self.MeanNorm)
-
-	def EvaluateTestOutputs(self, desired, predicted):
-		print "Evaluating, ", len(desired), " predictions... "
-		#print desired.shape, predicted.shape
-		if (self.OType=="HardP"):
-			raise Exception("Unknown Digester Output Type.")
-		elif (self.OType=="Disp" or self.OType=="Force"):
-			ders=np.zeros(len(desired))
-			#comp=np.zeros(len(desired))
-			for i in range(len(desired)):
-				ders[i] = np.linalg.norm(self.unscld(predicted[i,-3:])-self.unscld(desired[i,-3:]))
-			print "Test displacement errors direct (mean,std) ", np.average(ders),np.std(ders)
-			print "Average learning target: ", np.average(desired[:,-3:],axis=0),"Average output (direct)",np.average(predicted[:,-3:],axis=0)
-			print "Fraction of incorrect directions: ", np.sum(np.sign(desired[:,-3:])-np.sign(predicted[:,-3:]))/(6.*len(desired))
-			for i in range(100):
-				print "Desired: ",i,self.unscld(desired[i,-3:])," Predicted: ",self.unscld(predicted[i,-3:])
-		elif (self.OType=="SmoothP"):
-			ders=np.zeros(len(desired))
-			iers=np.zeros(len(desired))
-			comp=np.zeros(len(desired))
-			for i in range(len(desired)):
-				#print "Direct - desired disp", desired[i,-3:]," Pred disp", predicted[i,-3:]
-				Pr = GRIDS.Rasterize(predicted[i,:GRIDS.NGau3])
-				Pr /= np.sum(Pr)
-				p=np.dot(GRIDS.MyGrid().T,Pr)
-				#print "fit disp: ", p
-				ders[i] = np.linalg.norm(predicted[i,-3:]-desired[i,-3:])
-				iers[i] = np.linalg.norm(p-desired[i,-3:])
-				comp[i] = np.linalg.norm(p-predicted[i,-3:])
-			print "Test displacement errors direct (mean,std) ", np.average(ders),np.std(ders), " indirect ",np.average(iers),np.std(iers), " Comp ", np.average(comp), np.std(comp)
-			print "Average learning target: ", np.average(desired[:,-3:],axis=0),"Average output (direct)",np.average(predicted[:,-3:],axis=0)
-			print "Fraction of incorrect directions: ", np.sum(np.sign(desired[:,-3:])-np.sign(predicted[:,-3:]))/(6.*len(desired))
-		elif (self.OType=="StoP"):
-			raise Exception("Unknown Digester Output Type.")
-		elif (self.OType=="Energy"):
-			raise Exception("Unknown Digester Output Type.")
-		elif (self.OType=="GoForce_old_version"): # python version is fine for here
-			raise Exception("Unknown Digester Output Type.")
-		else:
-			raise Exception("Unknown Digester Output Type.")
-		return
-
 #
 #  Various types of Batch Digests.
 #
@@ -246,13 +216,13 @@ class Digester:
 		Returns:
 			Two lists: containing inputs and outputs in order of eles_
 		"""
-		if (((self.name != "GauInv" and self.name !="GauSH")) or (self.OType != "GoForce" and self.OType!="Force" )):
+		if (((self.name != "GauInv" and self.name !="GauSH")) or (self.OType != "GoForce" and self.OType!="GoForceSphere" and self.OType!="Force" and self.OType !="ForceSphere" )):
 			raise Exception("Molwise Embedding not supported")
 		if (self.eshape==None or self.lshape==None):
 			tinps, touts = self.Emb(mol_,0,np.array([[0.0,0.0,0.0]]))
 			self.eshape = list(tinps[0].shape)
 			self.lshape = list(touts[0].shape)
-			print "Assigned Digester shapes: ",self.eshape,self.lshape
+			LOGGER.debug("Assigned Digester shapes: "+str(self.eshape)+str(self.lshape))
 		return self.Emb(mol_,-1,mol_.coords[0]) # will deal with getting energies if it's needed.
 
 	def TrainDigest(self, mol_, ele_, MakeDebug=False):
@@ -268,8 +238,7 @@ class Digester:
 			tinps, touts = self.Emb(mol_,0,np.array([[0.0,0.0,0.0]]))
 			self.eshape = list(tinps[0].shape)
 			self.lshape = list(touts[0].shape)
-			print "Assigned Digester shapes: ",self.eshape,self.lshape
-
+			LOGGER.debug("Assigned Digester shapes: "+str(self.eshape)+str(self.lshape))
 		ncase = mol_.NumOfAtomsE(ele_)*self.NTrainSamples
 		ins = np.zeros(shape=tuple([ncase]+list(self.eshape)),dtype=np.float32)
 		outs = np.zeros(shape=tuple([ncase]+list(self.lshape)),dtype=np.float32)

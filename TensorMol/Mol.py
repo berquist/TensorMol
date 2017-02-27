@@ -2,16 +2,17 @@ from Util import *
 import numpy as np
 import random, math
 import MolEmb
+from LinearOperations import *
 
 class Mol:
 	""" Provides a general purpose molecule"""
 	def __init__(self, atoms_ =  None, coords_ = None):
 		if (atoms_!=None):
-			self.atoms = atoms_
+			self.atoms = atoms_.copy()
 		else:
 			self.atoms = np.zeros(1,dtype=np.uint8)
 		if (coords_!=None):
-			self.coords = coords_
+			self.coords = coords_.copy()
 		else:
 			self.coords=np.zeros(shape=(1,1),dtype=np.float)
 		self.properties = {}
@@ -34,19 +35,22 @@ class Mol:
 	def NAtoms(self):
 		return self.atoms.shape[0]
 
-	def AtomTypes(self):
-		return np.unique(self.atoms)
-
-	def NEles(self):
-		return len(self.AtomTypes())
-
 	def NumOfAtomsE(self, e):
 		return sum( [1 if at==e else 0 for at in self.atoms ] )
 
 	def Calculate_Atomization(self):
-		self.atomization = self.properties["roomT_H"]
-		for i in range (0, self.atoms.shape[0]):
-			self.atomization = self.atomization - ele_roomT_H[self.atoms[i]]
+		if ("roomT_H" in self.properties):
+			AE = self.properties["roomT_H"]
+			for i in range (0, self.atoms.shape[0]):
+				if (self.atoms[i] in ELEHEATFORM):
+					AE = AE - ELEHEATFORM[self.atoms[i]]
+			self.properties["atomization"] = AE
+		else:
+			AE = self.properties["energy"]
+			for i in range (0, self.atoms.shape[0]):
+				if (self.atoms[i] in ELEHEATFORM):
+					AE = AE - ELEHEATFORM[self.atoms[i]]
+			self.properties["atomization"] = AE
 		return
 
 	def AtomsWithin(self,rad, pt):
@@ -55,22 +59,54 @@ class Mol:
 		return [i for i in range(self.NAtoms()) if dists[i]<rad]
 
 	def Rotate(self, axis, ang, origin=np.array([0.0, 0.0, 0.0])):
-		rm = RotationMatrix(axis,ang)
+		"""
+		Rotate atomic coordinates and forces if present.
+		Args:
+			axis: vector for rotation axis
+			ang: radians of rotation
+			origin: origin of rotation axis.
+		"""
+		rm = RotationMatrix(axis, ang)
 		crds = np.copy(self.coords)
 		crds -= origin
 		for i in range(len(self.coords)):
 			self.coords[i] = np.dot(rm,crds[i])
-		crds += origin
+		if ("forces" in self.properties.keys()):
+			# Must also rotate the force vectors
+			old_endpoints = crds+self.properties["forces"]
+			new_forces = np.zeros(crds.shape)
+			for i in range(len(self.coords)):
+				new_endpoint = np.dot(rm,old_endpoints[i])
+				new_forces[i] = new_endpoint - self.coords[i]
+			self.properties["forces"] = new_forces
+		self.coords += origin
+
+	def RotateRandomUniform(self, randnums=None, origin=np.array([0.0, 0.0, 0.0])):
+		"""
+		Rotate atomic coordinates and forces if present.
+		Args:
+			randnums: theta, phi, and z for rotation, if None then rotation is random
+			origin: origin of rotation axis.
+		"""
+		rm = RotationMatrix_v2(randnums)
+		crds = np.copy(self.coords)
+		crds -= origin
+		for i in range(len(self.coords)):
+			self.coords[i] = np.dot(rm,crds[i])
+		if ("forces" in self.properties.keys()):
+			# Must also rotate the force vectors
+			old_endpoints = crds+self.properties["forces"]
+			new_forces = np.zeros(crds.shape)
+			for i in range(len(self.coords)):
+				new_endpoint = np.dot(rm,old_endpoints[i])
+				new_forces[i] = new_endpoint - self.coords[i]
+			self.properties["forces"] = new_forces
+		self.coords += origin
 
 	def Transform(self,ltransf,center=np.array([0.0,0.0,0.0])):
 		crds=np.copy(self.coords)
 		for i in range(len(self.coords)):
 			self.coords[i] = np.dot(ltransf,crds[i]-center) + center
-
-	def MoveToCenter(self):
-		first_atom = (self.coords[0]).copy()
-		for i in range (0, self.NAtoms()):
-			self.coords[i] = self.coords[i] - first_atom
 
 	def AtomsWithin(self, SensRadius, coord):
 		''' Returns atoms within the sensory radius in sorted order. '''
@@ -98,14 +134,6 @@ class Mol:
 					while (not accepted and maxiter>0):
 						tmp = self.coords
 						tmp[i,j] += np.random.normal(0.0, disp)
-						# mindist = None
-						# if (self.DistMatrix != None):
-						# 	if((self.GoEnergy(tmp)-e0) < 0.005):
-						# 		#print "LJE: ", self.LJEnergy(tmp)
-						# 		#print self.coords
-						# 		accepted = True
-						# 		self.coords = tmp
-						# else:
 						mindist = np.min([ np.linalg.norm(tmp[i,:]-tmp[k,:]) if i!=k else 1.0 for k in range(self.NAtoms()) ])
 						if (mindist>0.35):
 							accepted = True
@@ -188,7 +216,7 @@ class Mol:
 		except Exception as Ex:
 			print "Read Failed.", Ex
 			raise Ex
-		if (("energy" in self.properties) and ("roomT_H" in self.properties)):
+		if (("energy" in self.properties) or ("roomT_H" in self.properties)):
 			self.Calculate_Atomization()
 		return
 
@@ -198,7 +226,8 @@ class Mol:
 		if (len(lines[1].split())>1):
 			try:
 				self.properties["energy"]=float(lines[1].split()[1])
-			except:
+			except Exception as Ex:
+				# print "Problem with energy", string
 				pass
 		self.atoms.resize((natoms))
 		self.coords.resize((natoms,3))
@@ -219,6 +248,8 @@ class Mol:
 				self.coords[i,2]=float(line[3])
 			except:
 				self.coords[i,2]=scitodeci(line[3])
+		if ("energy" in self.properties):
+			self.Calculate_Atomization()
 		return
 
 	def WriteXYZfile(self, fpath=".", fname="mol", mode="a"):
@@ -277,7 +308,7 @@ class Mol:
 		grids = grids.reshape(ngrids**3)   #kind of ugly, but lets keep it for now
 		return grids
 
-	def SpanningGrid(self,num=250,pad=4.):
+	def SpanningGrid(self,num=250,pad=4.,Flatten=True, Cubic = True):
 		''' Returns a regular grid the molecule fits into '''
 		xmin=np.min(self.coords[:,0])-pad
 		xmax=np.max(self.coords[:,0])+pad
@@ -285,8 +316,18 @@ class Mol:
 		ymax=np.max(self.coords[:,1])+pad
 		zmin=np.min(self.coords[:,2])-pad
 		zmax=np.max(self.coords[:,2])+pad
+		lx = xmax-xmin
+		ly = ymax-ymin
+		lz = zmax-zmin
+		if (Cubic):
+			mlen = np.max([lx,ly,lz])
+			xmax = xmin + mlen
+			ymax = ymin + mlen
+			zmax = zmin + mlen
 		grids = np.mgrid[xmin:xmax:num*1j, ymin:ymax:num*1j, zmin:zmax:num*1j]
-		grids = grids.transpose()
+		grids = grids.transpose((1,2,3,0))
+		if (not Flatten):
+			return grids.rshape()
 		grids = grids.reshape((grids.shape[0]*grids.shape[1]*grids.shape[2], grids.shape[3]))
 		return grids, (xmax-xmin)*(ymax-ymin)*(zmax-zmin)
 
@@ -423,16 +464,17 @@ class Mol:
 		newd = newd*newd
 		return PARAMS["GoK"]*np.sum(newd)
 
-	def GoEnergyAfterAtomMove(self,s,ii):
-		''' The GO potential enforces equilibrium bond lengths. '''
-		raise Exception("Depreciated.")
-
-	def GoForce(self, at_=-1):
+	def GoForce(self, at_=-1, spherical = 0):
 		'''
 			The GO potential enforces equilibrium bond lengths, and this is the force of that potential.
 			Args: at_ an atom index, if at_ = -1 it returns an array for each atom.
 		'''
-		return PARAMS["GoK"]*MolEmb.Make_GoForce(self.coords,self.DistMatrix,at_)
+		if (spherical):
+			rthph = MolEmb.Make_GoForce(self.coords,self.DistMatrix,at_,1)
+			rthph[:,0] = rthph[:,0]*PARAMS["GoK"]
+			return rthph
+		else:
+			return PARAMS["GoK"]*MolEmb.Make_GoForce(self.coords,self.DistMatrix,at_,0)
 
 	def GoForceLocal(self, at_=-1):
 		''' The GO potential enforces equilibrium bond lengths, and this is the force of that potential.
@@ -489,7 +531,7 @@ class Mol:
 				tmp = v[:,a*3+ap]/np.linalg.norm(v[:,a*3+ap])
 				eigv = np.reshape(tmp,(self.NAtoms(),3))
 				for d in range(npts):
-					tore[nout,d,:,:] = self.coords+disp*(self.NAtoms()*(d-npts/2.0+0.37)/npts)*eigv
+					tore[nout,d,:,:] = (self.coords+disp*(self.NAtoms()*(d-npts/2.0+0.37)/npts)*eigv).real
 					#print disp*(self.NAtoms()*(d-npts/2.0+0.37)/npts)*eigv
 					#print d, self.GoEnergy(tore[nout,d,:,:].flatten())#, PARAMS["GoK"]*MolEmb.Make_GoForce(tore[nout,d,:,:],self.DistMatrix,-1)
 				nout = nout+1
@@ -557,7 +599,9 @@ class Mol:
 
 	def EnergyAfterAtomMove(self,s,i,Type="GO"):
 		if (Type=="GO"):
-			return self.GoEnergyAfterAtomMove(s,i)
+			out = np.zeros(s.shape[:-1])
+			MolEmb.Make_Go(s,self.DistMatrix,out,self.coords,i)
+			return out
 		else:
 			raise Exception("Unknown Energy")
 
@@ -599,24 +643,6 @@ class Mol:
 	#Most parameters are unneccesary.
 	def OverlapEmbeddings(self, d1, coords, d2 , d3 ,  d4 , d5, i, d6):#(self,coord,i):
 		return np.array([GRIDS.EmbedAtom(self,j,i) for j in coords])
-
-	def GoMeanProbForce(self):
-		forces = np.zeros(shape=(self.NAtoms(),3))
-		for ii in range(self.NAtoms()):
-			Ps = self.POfAtomMoves(GRIDS.MyGrid(),ii)
-			print "SAMPLE CENTER:", self.coords[ii]
-			forces[ii] = np.dot(samps.T,Ps)
-			print "Disp CENTER:", Pc
-		return forces
-
-	def GoDisp(self,ii,Print=False):
-		'''
-			Generates a Go-potential for atom i on a uniform grid of 4A with 50 pts/direction
-			And fits that go potential with the H@0 basis centered at the same point
-			In practice 9 (1A) gaussians separated on a 1A grid around the sensory point appears to work for moderate distortions.
-		'''
-		Ps = self.POfAtomMoves(GRIDS.MyGrid(),ii)
-		return np.array([np.dot(GRIDS.MyGrid().T,Ps)])
 
 	def FitGoProb(self,ii,Print=False):
 		'''
@@ -668,10 +694,11 @@ class Mol:
 		MolEmb.Make_Go(samps+self.coords[i],self.DistMatrix,Es,self.coords,i)
 		Es=np.nan_to_num(Es)
 		Es=Es-np.min(Es)
-		Ps = np.exp(-1.0*Es/KAYBEETEE)
+		Ps = np.exp(-1.0*Es/(0.25*np.std(Es)))
 		Ps=np.nan_to_num(Ps)
 		Z = np.sum(Ps)
-		return Ps/Z
+		Ps /= Z
+		return Ps
 
 	def Force_from_xyz(self, path):
 		"""
@@ -697,3 +724,26 @@ class Mol:
 			self.properties['forces'] = forces
 		except Exception as Ex:
 			print "Read Failed.", Ex
+
+	def Energy_from_xyz(self, path):
+		"""
+		Reads the energy from the comment line in the md_dataset.
+		Switched on by has_energy=True in the ReadGDB9Unpacked routine
+		"""
+		try:
+			f = open(path, 'r')
+			lines = f.readlines()
+			energy = (lines[1].strip().split(';'))[0]
+			self.properties['energy'] = energy
+		except Exception as Ex:
+			print "Read Failed.", Ex
+
+	def Set_EQ_force(self):
+		"""
+		Sets forces to 0 for equilibrium molecules with no force data.
+		"""
+		if not self.properties.get("forces", None):
+			self.properties["forces"]=np.zeros((self.NAtoms(),3))
+
+	def Make_Spherical_Forces(self):
+		self.properties["sphere_forces"] = CartToSphereV(self.properties["forces"])

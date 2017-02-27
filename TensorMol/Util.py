@@ -3,7 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import gc, random, os, sys, pickle, re, atexit
+import cPickle as pickle
+import gc, random, os, sys, re, atexit
 import math, time, itertools, warnings
 from math import pi as Pi
 import scipy.special
@@ -22,9 +23,6 @@ warnings.simplefilter(action = "ignore", category = FutureWarning)
 #  TODO: Migrate these to PARAMS
 PARAMS = TMParams()
 LOGGER = TMLogger(PARAMS["results_dir"])
-LOGGER.debug("TMPARAMS---")
-LOGGER.debug(PARAMS)
-LOGGER.debug("~~~TMPARAMS")
 MAX_ATOMIC_NUMBER = 10
 MBE_ORDER = 2
 # Derived Quantities and useful things.
@@ -35,14 +33,13 @@ HAS_TF = False
 GRIDS = None
 HAS_GRIDS=True
 # KUN PLEASE MAKE THESE ALL CAPS FOLLOWING OUR CONVENTION.
-ele_roomT_H = {1:-0.497912, 6:-37.844411, 7:-54.581501, 8:-75.062219, 9:-99.716370}     # ref: https://figshare.com/articles/Atomref%3A_Reference_thermochemical_energies_of_H%2C_C%2C_N%2C_O%2C_F_atoms./1057643
+ELEHEATFORM = {1:-0.497912, 6:-37.844411, 7:-54.581501, 8:-75.062219, 9:-99.716370}     # ref: https://figshare.com/articles/Atomref%3A_Reference_thermochemical_energies_of_H%2C_C%2C_N%2C_O%2C_F_atoms./1057643
 atoi = {'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,'Sc':21,'Ti':22,'Si':23,'V':24,'Cr':25,'Br':35, 'Cs':55, 'Pb':82}
 atoc = {1: 40, 6: 100, 7: 150, 8: 200, 9:240}
 bond_length_thresh = {"HH": 1.5, "HC": 1.5, "HN": 1.5, "HO": 1.5, "CC":2.0, "CN":2.0, "CO": 2.0, "NN":2.0, "NO":2.0, "OO":2.0 }
 atomic_radius = {1:53.0, 2:31.0, 3:167.0, 4:112.0, 5:87.0, 6:67.0, 7:56.0, 8:48.0, 9:42.0, 10:38.0, 11:190.0, 12:145.0, 13:118.0, 14:111.0, 15:98.0, 16:88.0, 17:79.0, 18:71.0} # units in pm, ref: https://en.wikipedia.org/wiki/Atomic_radius
 atomic_radius_2 = {1:25.0, 3:145.0, 4:105.0, 5:85.0, 6:70.0, 7:65.0, 8:60.0, 9:50.0, 11:180.0, 12:150.0, 13:125.0, 14:110.0, 15:100.0, 16:100.0, 17:100.0} # units in pm, ref: https://en.wikipedia.org/wiki/Atomic_radius
 atomic_raidus_cho = {1:0.328, 6:0.754, 8:0.630} # roughly statisfy mp2 cc-pvtz equilibrium carbohydrate bonds.
-KAYBEETEE = 0.000950048 # At 300K
 BOHRPERA = 1.889725989
 Qchem_RIMP2_Block = "$rem\n   jobtype   sp\n   method   rimp2\n   MAX_SCF_CYCLES  200\n   basis   cc-pvtz\n   aux_basis rimp2-cc-pvtz\n   symmetry   false\n   INCFOCK 0\n   thresh 12\n   SCF_CONVERGENCE 12\n$end\n"
 #
@@ -65,9 +62,18 @@ except Exception as Ex:
 try:
 	import MolEmb
 	HAS_EMB = True
-	LOGGER.debug("MolEmb has been found")
-except:
-	print("MolEmb is not installed. Please cd C_API; sudo python setup.py install")
+	LOGGER.debug("MolEmb has been found, Orthogonalizing Radial Basis.")
+	S = MolEmb.Overlap_SH(PARAMS)
+	from TensorMol.LinearOperations import MatrixPower
+	SOrth = MatrixPower(S,-1./2)
+	PARAMS["GauSHSm12"] = SOrth
+	S_Rad = MolEmb.Overlap_RBF(PARAMS)
+	S_RadOrth = MatrixPower(S_Rad,-1./2)
+	PARAMS["SRBF"] = S_RadOrth
+	# THIS SHOULD BE IMPLEMENTED TOO.
+	#PARAMS["GauInvSm12"] = MatrixPower(S,-1./2)
+except Exception as Ex:
+	print("MolEmb is not installed. Please cd C_API; sudo python setup.py install",Ex)
 	pass
 
 try:
@@ -86,6 +92,10 @@ except:
 	LOGGER.info("Only a single CPU, :( did you lose a war?")
 	pass
 LOGGER.debug("TensorMol ready...")
+
+LOGGER.debug("TMPARAMS----------")
+LOGGER.debug(PARAMS)
+LOGGER.debug("TMPARAMS~~~~~~~~~~")
 
 TOTAL_SENSORY_BASIS=None
 SENSORY_BASIS=None
@@ -154,7 +164,6 @@ def CosSoftCut(dist, x):
 		return 0
 	else:
 		return 0.5*(math.cos(math.pi*x/dist)+1.0)
-
 	return
 
 def nCr(n, r):
@@ -166,21 +175,6 @@ def Submit_Script_Lines(order=str(3), sub_order =str(1), index=str(1), mincase =
 	lines += "module load gcc/5.2.0\nsetenv  QC /afs/crc.nd.edu/group/parkhill/qchem85\nsetenv  QCAUX /afs/crc.nd.edu/group/parkhill/QCAUX_1022\nsetenv  QCPLATFORM LINUX_Ix86\n\n\n"
 	lines += "/afs/crc.nd.edu/group/parkhill/qchem85/bin/qchem  -nt "+ncore+"   "+str(order)+"/"+"${SGE_TASK_ID}/"+sub_order+"/"+index+".in  "+str(order)+"/"+"${SGE_TASK_ID}/"+sub_order+"/"+index+".out\n\nrm MBE*.o*"
 	return lines
-
-def RotationMatrix(axis, theta):
-    """
-    Return the rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians.
-    """
-    axis = np.asarray(axis)
-    axis = axis/np.linalg.norm(axis)
-    a = math.cos(theta/2.0)
-    b, c, d = -axis*math.sin(theta/2.0)
-    aa, bb, cc, dd = a*a, b*b, c*c, d*d
-    bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
-    return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
-                     [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
-                     [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
 
 def Binominal_Combination(indis=[0,1,2], group=3):
 	if (group==1):

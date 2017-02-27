@@ -11,7 +11,7 @@ class TFManage:
 		A manager of tensorflow instances which perform atom-wise predictions
 		and parent of the molecular instance mangager.
 	"""
-	def __init__(self, Name_="", TData_=None, Train_=True, NetType_="fc_sqdiff", RandomTData_=True, ntrain_=2000):
+	def __init__(self, Name_="", TData_=None, Train_=True, NetType_="fc_sqdiff", RandomTData_=True, ntrain_=PARAMS["max_steps"]):
 		"""
 			Args:
 				Name_: If not blank, will try to load a network with that name using Prepare()
@@ -54,14 +54,13 @@ class TFManage:
 		print "Will train a NNetwork for each element in: ", self.TData.name
 		for i in range(len(self.TData.AvailableElements)):
 			self.TrainElement(self.TData.AvailableElements[i])
-		self.Save()
 		return
 
 	def Save(self):
 		print "Saving TFManager:",self.path+self.name+".tfm"
 		self.TData.CleanScratch()
 		f=open(self.path+self.name+".tfm","wb")
-		pickle.dump(self.__dict__, f, protocol=1)
+		pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)
 		f.close()
 		return
 
@@ -80,7 +79,7 @@ class TFManage:
 		if (self.TData.dig.eshape==None):
 			raise Exception("Must Have Digester")
 		# It's up the TensorData to provide the batches and input output shapes.
-		if (self.NetType == "fc_classify"):
+		if (self.NetType == "fc_classify" or PARAMS["Classify"]):
 			self.Instances[ele] = Instance_fc_classify(self.TData, ele, None)
 		elif (self.NetType == "fc_sqdiff"):
 			self.Instances[ele] = Instance_fc_sqdiff(self.TData, ele, None)
@@ -140,7 +139,7 @@ class TFManage:
 		p = mol_.UseGoProb(atom_, output)
 		return p
 
-	def EvalRotAvForce(self, mol, RotAv=10):
+	def EvalRotAvForce(self, mol, RotAv=10, Debug=False):
 		"""
 		Goes without saying we should do this in batches for each element,
 		if it actually improves accuracy. And improve rotational sampling.
@@ -149,48 +148,79 @@ class TFManage:
 		if(self.TData.dig.name != "GauSH"):
 		    raise Exception("Don't average this...")
 		p = np.zeros((mol.NAtoms(),3))
-		pi = np.zeros((3,10,mol.NAtoms(),3))
-		for ax in range(3):
-			axis = np.zeros(3)
-			axis[ax] = 1.0
-			t = 0
-			for theta in np.linspace(-Pi, Pi, RotAv):
-				for atom in range(mol.NAtoms()):
-					mol_t = Mol(mol.atoms, mol.coords)
-					mol_t.Rotate(ax, theta, mol.coords[atom])
-					inputs = self.TData.dig.Emb(mol_t, atom, mol_t.coords[atom],False)
-					tmp = self.Instances[mol_t.atoms[atom]].evaluate(input)[0]
-					p[atom] = np.dot(RotationMatrix(ax, -1.0*theta),tmp)
-					pi[ax,theta,atom] = p[atom]
-				t=t+1
-		# Just to debug and see how much the forces vary with rotation:
-		print "Checking Rotations... "
+		pi = np.zeros((3,RotAv,mol.NAtoms(),3))
 		for atom in range(mol.NAtoms()):
-			print "Atom ", atom, " mean: ", np.mean(pi[:,:,atom],axis=(0,1)), " std ",np.std(pi[:,:,atom],axis=(0,1))
+			inputs = np.zeros((3*RotAv,PARAMS["SH_NRAD"]*(PARAMS["SH_LMAX"]+1)*(PARAMS["SH_LMAX"]+1)))
 			for ax in range(3):
-				t = 0
-				for theta in np.linspace(-Pi, Pi, RotAv):
-					print atom,ax,theta,":",pi[ax,theta,atom]
-				t=t+1
+				axis = [0,0,0]
+				axis[ax] = 1
+				for i, theta in enumerate(np.linspace(-Pi, Pi, RotAv)):
+					mol_t = Mol(mol.atoms, mol.coords)
+					mol_t.Rotate(axis, theta, mol.coords[atom])
+					inputs[ax*RotAv+i] = self.TData.dig.Emb(mol_t, atom, mol_t.coords[atom],False)
+			if (self.Instances[mol_t.atoms[atom]].tformer.innorm != None):
+				inputs = self.Instances[mol_t.atoms[atom]].tformer.NormalizeIns(inputs, train=False)
+			outs = self.Instances[mol_t.atoms[atom]].evaluate(inputs)
+			if (self.Instances[mol_t.atoms[atom]].tformer.outnorm != None):
+				outs = self.Instances[mol_t.atoms[atom]].tformer.UnNormalizeOuts(outs)
+			for ax in range(3):
+				axis = [0,0,0]
+				axis[ax] = 1
+				for i, theta in enumerate(np.linspace(-Pi, Pi, RotAv)):
+					pi[ax,i,atom] = np.dot(RotationMatrix(axis, -1.0*theta),outs[0,ax*RotAv+i].T).reshape(3)
+					p[atom] += pi[ax,i,atom]
+		if (Debug):
+			print "Checking Rotations... "
+			for atom in range(mol.NAtoms()):
+				print "Atom ", atom, " mean: ", np.mean(pi[:,:,atom],axis=(0,1)), " std ",np.std(pi[:,:,atom],axis=(0,1))
+				for ax in range(3):
+					for i, theta in enumerate(np.linspace(-Pi, Pi, RotAv)):
+						print atom,ax,theta,":",pi[ax,i,atom]
 		return p/(3.0*RotAv)
 
-	def evaluate(self, mol, atom, RotAv=10):
-		input = self.TData.dig.Emb(mol, atom, mol.coords[atom],False)
-		p = self.Instances[mol.atoms[atom]].evaluate(input)
-		return p[0]
+	def EvalOctAvForce(self, mol, Debug=False):
+		"""
+		Goes without saying we should do this in batches for each element,
+		if it actually improves accuracy. And improve rotational sampling.
+		But for the time being I'm doing this sloppily.
+		"""
+		if(self.TData.dig.name != "GauSH"):
+		    raise Exception("Don't average this...")
+		ops = OctahedralOperations()
+		invops = map(np.linalg.inv,ops)
+		pi = np.zeros((mol.NAtoms(),len(ops),3))
+		p = np.zeros((mol.NAtoms(),3))
+		for atom in range(mol.NAtoms()):
+			inputs = np.zeros((len(ops),PARAMS["SH_NRAD"]*(PARAMS["SH_LMAX"]+1)*(PARAMS["SH_LMAX"]+1)))
+			for i in range(len(ops)):
+				op = ops[i]
+				mol_t = Mol(mol.atoms, mol.coords)
+				mol_t.Transform(op, mol.coords[atom])
+				inputs[i] = self.TData.dig.Emb(mol_t, atom, mol_t.coords[atom],False)
+			if (self.Instances[mol_t.atoms[atom]].tformer.innorm != None):
+				inputs = self.Instances[mol_t.atoms[atom]].tformer.NormalizeIns(inputs, train=False)
+			outs = self.Instances[mol_t.atoms[atom]].evaluate(inputs)[0]
+			if (self.Instances[mol_t.atoms[atom]].tformer.outnorm != None):
+				outs = self.Instances[mol_t.atoms[atom]].tformer.UnNormalizeOuts(outs)
+			for i in range(len(ops)):
+				pi[atom,i] = np.dot(invops[i],outs[i].T).reshape(3)
+				p[atom] += np.sum(pi[atom,i], axis=0)
+		if (Debug):
+			print "Checking Rotations... "
+			for atom in range(mol.NAtoms()):
+				print "Atom ", atom, " mean: ", np.mean(pi[atom,:],axis=0), " std ",np.std(pi[atom,:],axis=0)
+				for i in range(len(ops)):
+					print atom, i, pi[atom,i]
+		return p/(len(ops))
 
-	def EvalOneAtom(self, mol, atom, maxstep = 0.2, ngrid = 50):
-		xyz, inputs = self.SampleAtomGrid( mol, atom, maxstep, ngrid)
-		p = self.Instances[mol.atoms[atom]].evaluate(inputs)
-		if (np.sum(p**2)**0.5 != 0):
-			p = p/(np.sum(p**2))**0.5
-		else:
-			p.fill(1.0)
-		#Check finite-ness or throw
-		if(not np.all(np.isfinite(p))):
-			print p
-			raise Exception("BadTFOutput")
-		return xyz, p
+	def evaluate(self, mol, atom):
+		inputs = self.TData.dig.Emb(mol, atom, mol.coords[atom],False)
+		if (self.Instances[mol_t.atoms[atom]].tformer.innorm != None):
+			inputs = self.Instances[mol_t.atoms[atom]].tformer.NormalizeIns(inputs, train=False)
+		outs = self.Instances[mol.atoms[atom]].evaluate(inputs)
+		if (self.Instances[mol_t.atoms[atom]].tformer.outnorm != None):
+			outs = self.Instances[mol_t.atoms[atom]].tformer.UnNormalizeOuts(outs)
+		return outs[0]
 
 	def EvalOneAtom(self, mol, atom, maxstep = 0.2, ngrid = 50):
 		xyz, inputs = self.SampleAtomGrid( mol, atom, maxstep, ngrid)

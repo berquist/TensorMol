@@ -1,5 +1,6 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <dictobject.h>
 #include <math.h>
 #include <algorithm>
 #include <cstdlib>
@@ -7,23 +8,47 @@
 #include <vector>
 #include "SH.hpp"
 
-//Make_AM (center_m, ele_index, molxyz_data, Nxyz, AM_data);
-
-
-#define PI 3.14159265358979
+// So that parameters can be dealt with elsewhere.
+static SHParams ParseParams(PyObject *Pdict)
+{
+	SHParams tore;
+	{
+		PyObject* RBFo = PyDict_GetItemString(Pdict, "RBFS");
+		PyArrayObject* RBFa = (PyArrayObject*) RBFo;
+		tore.RBFS = (double*)RBFa->data;
+		tore.SH_NRAD = (RBFa->dimensions)[0];
+	}
+	{
+		PyObject* RBFo = PyDict_GetItemString(Pdict, "SRBF");
+		PyArrayObject* RBFa = (PyArrayObject*) RBFo;
+		tore.SRBF = (double*)RBFa->data;
+	}
+	{
+		PyObject* RBFo = PyDict_GetItemString(Pdict, "ORBFS");
+		PyArrayObject* RBFa = (PyArrayObject*) RBFo;
+		tore.ORBFS = (double*)RBFa->data;
+	}
+	tore.SH_LMAX = PyInt_AS_LONG((PyDict_GetItemString(Pdict,"SH_LMAX")));
+	tore.SH_NRAD = PyInt_AS_LONG((PyDict_GetItemString(Pdict,"SH_NRAD")));
+	tore.SH_ORTH = PyInt_AS_LONG((PyDict_GetItemString(Pdict,"SH_ORTH")));
+	tore.SH_MAXNR = PyInt_AS_LONG((PyDict_GetItemString(Pdict,"SH_MAXNR")));
+	//for (int i=0; i<tore.SH_NRAD; ++i)
+	//	cout << tore.RBFS[i*2] << " " << tore.RBFS[i*2+1] <<  endl;
+	return tore;
+}
 
 inline double fc(const double &dist, const double &dist_cut) {
 	if (dist > dist_cut)
 	return(0.0);
 	else
 	return (0.5*(cos(PI*dist/dist_cut)+1));
-}
+};
 
 inline double gaussian(const double dist_cut, const int ngrids, double dist, const int j,  const double  width, const double height)  {
 	double position;
 	position = dist_cut / (double)ngrids * (double)j;
 	return height*exp(-((dist - position)*(dist-position))/(2*width*width));
-}
+};
 
 int Make_AM (const double*, const array<std::vector<int>, 100>, const int &, const int &,  const int &, const double*, npy_intp*, double*, const int &);
 int G1(double *, const double *, const double *, int , int , const array<std::vector<int>, 100> , const int, const double *, const double *, const double );
@@ -55,7 +80,8 @@ void rdf(double *data,  const int ngrids,  const array<std::vector<int>, 100> el
 	}
 }
 
-int  PGaussian(double *data, const double *eta,  int dim_eta, const array<std::vector<int>, 100>  ele_index, const int v_index, const double *center, const double *xyz, const double dist_cut) {
+int  PGaussian(double *data, const double *eta,  int dim_eta, const array<std::vector<int>, 100>  ele_index, const int v_index, const double *center, const double *xyz, const double dist_cut)
+{
 	double dist1, fc1,x,y,z;
 	for (int i = 0; i < ele_index[v_index].size(); i++) {
 		x = xyz[ele_index[v_index][i]*3+0] - center[0];
@@ -73,6 +99,7 @@ int  PGaussian(double *data, const double *eta,  int dim_eta, const array<std::v
 			}
 		}
 	}
+	return 0;
 }
 
 int  G1(double *data, const double *Rs, const double *eta, int dim_Rs, int dim_eta, const array<std::vector<int>, 100>  ele_index, const int v_index, const double *center, const double *xyz, const double dist_cut) {
@@ -89,6 +116,7 @@ int  G1(double *data, const double *Rs, const double *eta, int dim_Rs, int dim_e
 			}
 		}
 	}
+	return 0;
 }
 
 double dist(double x0,double y0,double z0,double x1,double y1,double z1)
@@ -156,16 +184,15 @@ static PyObject* Make_Go(PyObject *self, PyObject  *args) {
 			{
 				if (i==theatom)
 				{
-					outmat[s] += 0.125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*j],coords[3*j+1],coords[3*j+2]),2.0);
+					outmat[s] += 0.0125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*j],coords[3*j+1],coords[3*j+2]),2.0);
 				}
 				else if (j==theatom)
 				{
-					outmat[s] += 0.125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*i],coords[3*i+1],coords[3*i+2]),2.0);
+					outmat[s] += 0.0125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*i],coords[3*i+1],coords[3*i+2]),2.0);
 				}
 			}
 		}
 	}
-
 	PyObject* nlist = PyList_New(0);
 	return nlist;
 }
@@ -390,12 +417,13 @@ static PyObject*  Make_CM (PyObject *self, PyObject  *args)
 static PyObject* Make_SH(PyObject *self, PyObject  *args)
 {
 	PyArrayObject *xyz, *grids,  *elements, *atoms_;
-	double   dist_cut,  mask, mask_prob,dist;
+	double   dist_cut;
 	int  ngrids,  theatom;
-	if (!PyArg_ParseTuple(args, "O!O!O!diid",
-	&PyArray_Type, &xyz, &PyArray_Type, &grids, &PyArray_Type, &atoms_ , &dist_cut, &ngrids, &theatom, &mask))
+	PyObject *Prm_;
+	if (!PyArg_ParseTuple(args, "O!O!O!i", &PyDict_Type, &Prm_, &PyArray_Type, &xyz, &PyArray_Type, &atoms_ , &theatom))
 	return NULL;
 
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
 	const int nele = (elements->dimensions)[0];
 	uint8_t* ele=(uint8_t*)elements->data;
 	uint8_t* atoms=(uint8_t*)atoms_->data;
@@ -404,7 +432,7 @@ static PyObject* Make_SH(PyObject *self, PyObject  *args)
 	natom = Nxyz[0];
 
 	//npy_intp outdim[2] = {natom,SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX)};
-	npy_intp outdim[2] = {1,SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX)};
+	npy_intp outdim[2] = {1,Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX)};
 	if (theatom<0)
 	outdim[0] = natom;
 	PyObject* SH = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
@@ -430,7 +458,7 @@ static PyObject* Make_SH(PyObject *self, PyObject  *args)
 				double y = xyz_data[j*Nxyz[1]+1];
 				double z = xyz_data[j*Nxyz[1]+2];
 				//RadSHProjection(x-xc,y-yc,z-zc,SH_data + i*SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX), natom);
-				RadSHProjection_Orth(x-xc,y-yc,z-zc,SH_data + i*SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX), natom);
+				RadSHProjection(Prm,x-xc,y-yc,z-zc,SH_data + i*Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX), natom);
 			}
 		}
 	}
@@ -447,29 +475,29 @@ static PyObject* Make_SH(PyObject *self, PyObject  *args)
 			double x = xyz_data[j*Nxyz[1]+0];
 			double y = xyz_data[j*Nxyz[1]+1];
 			double z = xyz_data[j*Nxyz[1]+2];
-			RadSHProjection(x-xc,y-yc,z-zc,SH_data + ai*SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX), natom);
+			RadSHProjection(Prm,x-xc,y-yc,z-zc,SH_data + ai*Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX), natom);
 		}
 	}
 	//	}
 	return SH;
 }
 
-
 //
 // Embed molecule using Gaussian X Spherical Harmonic basis
 // Does all atoms... just for debug really.
 // Make invariant embedding of all the atoms.
 // This is not a reversible embedding.
-//
 static PyObject* Make_Inv(PyObject *self, PyObject  *args)
 {
 	PyArrayObject *xyz, *grids,  *elements, *atoms_;
 	double   dist_cut,  mask, mask_prob,dist;
 	int  ngrids,  theatom;
-	if (!PyArg_ParseTuple(args, "O!O!O!di",
-	&PyArray_Type, &xyz, &PyArray_Type, &grids, &PyArray_Type, &atoms_ , &dist_cut, &theatom))
+	PyObject* Prm_;
+	if (!PyArg_ParseTuple(args, "O!O!O!i",
+	&PyDict_Type, &Prm_, &PyArray_Type, &xyz, &PyArray_Type, &atoms_ , &theatom))
 	return NULL;
 
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
 	uint8_t* ele=(uint8_t*)elements->data;
 	uint8_t* atoms=(uint8_t*)atoms_->data;
 	npy_intp* Nxyz = xyz->dimensions;
@@ -478,10 +506,10 @@ static PyObject* Make_Inv(PyObject *self, PyObject  *args)
 
 	npy_intp outdim[2];
 	if (theatom>=0)
-	outdim[0] = 1;
+		outdim[0] = 1;
 	else
-	outdim[0] = natom;
-	outdim[1]=SH_NRAD*(1+SH_LMAX);
+		outdim[0] = natom;
+	outdim[1]=Prm->SH_NRAD*(1+Prm->SH_LMAX);
 	PyObject* SH = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
 
 	double *SH_data, *xyz_data, *grids_data;
@@ -511,7 +539,7 @@ if (theatom >= 0)
 		double x = xyz_data[j*Nxyz[1]+0];
 		double y = xyz_data[j*Nxyz[1]+1];
 		double z = xyz_data[j*Nxyz[1]+2];
-		RadInvProjection(x-xc,y-yc,z-zc,SH_data,(double)atoms[j]);
+		RadInvProjection(Prm, x-xc,y-yc,z-zc,SH_data,(double)atoms[j]);
 	}
 }
 else
@@ -527,7 +555,7 @@ else
 			double x = xyz_data[j*Nxyz[1]+0];
 			double y = xyz_data[j*Nxyz[1]+1];
 			double z = xyz_data[j*Nxyz[1]+2];
-			RadInvProjection(x-xc,y-yc,z-zc,SH_data+i*(outdim[1]),(double)atoms[j]);
+			RadInvProjection(Prm, x-xc,y-yc,z-zc,SH_data+i*(outdim[1]),(double)atoms[j]);
 		}
 	}
 }
@@ -543,11 +571,13 @@ static PyObject* Raster_SH(PyObject *self, PyObject  *args)
 	PyArrayObject *xyz, *grids,  *elements, *atoms_;
 	double   dist_cut,  mask, mask_prob,dist;
 	int  ngrids,  theatom;
-	if (!PyArg_ParseTuple(args, "O!", &PyArray_Type, &xyz))
+	PyObject* Prm_;
+	if (!PyArg_ParseTuple(args, "O!O!", &PyDict_Type, &Prm_, &PyArray_Type, &xyz))
 	return NULL;
 
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
 	const int npts = (xyz->dimensions)[0];
-	int nbas = SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX);
+	int nbas = Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
 	npy_intp outdim[2] = {nbas,npts};
 	PyObject* SH = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
 
@@ -567,10 +597,10 @@ static PyObject* Raster_SH(PyObject *self, PyObject  *args)
 		//		cout << "r" << phi << endl;
 
 		int bi = 0;
-		for (int i=0; i<SH_NRAD ; ++i)
+		for (int i=0; i<Prm->SH_NRAD ; ++i)
 		{
-			double Gv = Gau(r, RBFS[i][0],RBFS[i][1]);
-			for (int l=0; l<SH_LMAX+1 ; ++l)
+			double Gv = Gau(r, Prm->RBFS[i*2],Prm->RBFS[i*2+1]);
+			for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
 			{
 				//				cout << "l=" << l << " Gv "<< Gv <<endl;
 				for (int m=-l; m<l+1 ; ++m)
@@ -585,17 +615,17 @@ static PyObject* Raster_SH(PyObject *self, PyObject  *args)
 	return SH;
 }
 
-//
 // Gives the projection of a delta function at xyz
-//
 static PyObject* Project_SH(PyObject *self, PyObject  *args)
 {
 	double x,y,z;
 	PyArrayObject *xyz;
-	if (!PyArg_ParseTuple(args, "O!", &PyArray_Type, &xyz))
-	return NULL;
+	PyObject* Prm_;
+	if (!PyArg_ParseTuple(args, "O!O!", &PyDict_Type, &Prm_, &PyArray_Type, &xyz))
+		return NULL;
 
-	int nbas = SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX);
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
+	int nbas = Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
 	npy_intp outdim[2] = {1,nbas};
 	PyObject* SH = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
 	double *SH_data,*xyz_data;
@@ -605,24 +635,23 @@ static PyObject* Project_SH(PyObject *self, PyObject  *args)
 	y=xyz_data[1];
 	z=xyz_data[2];
 	SH_data = (double*) ((PyArrayObject*)SH)->data;
-	int Nbas = SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX);
+	int Nbas = Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
 	//	int Nang = (1+SH_LMAX)*(1+SH_LMAX);
 	double r = sqrt(x*x+y*y+z*z);
 
 	if (r<pow(10.0,-11.0))
-	return SH;
+		return SH;
 	double theta = acos(z/r);
 	double phi = atan2(y,x);
 
 	//	cout << "R,theta,phi" << r << " " << theta << " " <<phi << " " <<endl;
-
 	int bi = 0;
-	for (int i=0; i<SH_NRAD ; ++i)
+	for (int i=0; i<Prm->SH_NRAD ; ++i)
 	{
-		double Gv = Gau(r, RBFS[i][0],RBFS[i][1]);
-		cout << RBFS[i][0] << " " << Gv << endl;
+		double Gv = Gau(r, Prm->RBFS[i*2],Prm->RBFS[i*2+1]);
+		cout << Prm->RBFS[i*2] << " " << Gv << endl;
 
-		for (int l=0; l<SH_LMAX+1 ; ++l)
+		for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
 		{
 			for (int m=-l; m<l+1 ; ++m)
 			{
@@ -678,9 +707,9 @@ static PyObject* Norm_Matrices(PyObject *self, PyObject *args)
 static PyObject* Make_GoForce(PyObject *self, PyObject  *args)
 {
 	PyArrayObject *xyz, *EqDistMat;
-	int at;
-	if (!PyArg_ParseTuple(args, "O!O!i", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat, &at))
-	return NULL;
+	int at, spherical;
+	if (!PyArg_ParseTuple(args, "O!O!ii", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat, &at, &spherical))
+		return NULL;
 	const int nat = (xyz->dimensions)[0];
 	npy_intp outdim[2] = {nat,3};
 	if (at>=0)
@@ -709,6 +738,9 @@ static PyObject* Make_GoForce(PyObject *self, PyObject  *args)
 				frc_data[i*3+2] += -2*(dij-d_data[i*nat+j])*u[2];
 			}
 		}
+		if (spherical)
+			for (int i=0; i < nat; ++i)
+				CartToSphere(frc_data+i*3);
 	}
 	else
 	{
@@ -726,6 +758,8 @@ static PyObject* Make_GoForce(PyObject *self, PyObject  *args)
 			frc_data[1] += -2*(dij-d_data[i*nat+j])*u[1];
 			frc_data[2] += -2*(dij-d_data[i*nat+j])*u[2];
 		}
+		if (spherical)
+				CartToSphere(frc_data);
 	}
 	return hess;
 }
@@ -894,18 +928,22 @@ static PyObject* Make_LJForce(PyObject *self, PyObject  *args)
 //
 static PyObject* Overlap_SH(PyObject *self, PyObject  *args)
 {
-	int nbas = SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX);
-	npy_intp outdim[2] = {nbas,nbas};
+	PyObject* Prm_;
+	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &Prm_))
+		return NULL;
+
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
+	int Nbas = Prm->SH_NRAD*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
+	npy_intp outdim[2] = {Nbas,Nbas};
 	PyObject* SH = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
 	double *SH_data;
 	SH_data = (double*) ((PyArrayObject*)SH)->data;
-	int Nbas = SH_NRAD*(1+SH_LMAX)*(1+SH_LMAX);
-	int Nang = (1+SH_LMAX)*(1+SH_LMAX);
-	for (int i=0; i<SH_NRAD ; ++i)
+	int Nang = (1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
+	for (int i=0; i<Prm->SH_NRAD ; ++i)
 	{
-		for (int j=i; j<SH_NRAD ; ++j)
+		for (int j=i; j<Prm->SH_NRAD ; ++j)
 		{
-			double S = GOverlap(RBFS[i][0],RBFS[j][0],RBFS[i][1],RBFS[j][1]);
+			double S = GOverlap(Prm->RBFS[i*2],Prm->RBFS[j*2],Prm->RBFS[i*2+1],Prm->RBFS[j*2+1]);
 			for (int l=0; l<Nang ; ++l)
 			{
 				int r = i*Nang + l;
@@ -916,6 +954,28 @@ static PyObject* Overlap_SH(PyObject *self, PyObject  *args)
 		}
 	}
 	return SH;
+}
+
+static PyObject* Overlap_RBF(PyObject *self, PyObject  *args)
+{
+	PyObject* Prm_;
+	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &Prm_))
+		return NULL;
+
+	SHParams Prmo = ParseParams(Prm_);SHParams* Prm=&Prmo;
+	int nbas = Prm->SH_NRAD;
+	npy_intp outdim[2] = {nbas,nbas};
+	PyObject* SRBF = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
+	double *SRBF_data;
+	SRBF_data = (double*) ((PyArrayObject*)SRBF)->data;
+	for (int i=0; i<Prm->SH_NRAD ; ++i)
+	{
+		for (int j=0; j<Prm->SH_NRAD ; ++j)
+		{
+			SRBF_data[i*Prm->SH_NRAD+j] = GOverlap(Prm->RBFS[i*2],Prm->RBFS[j*2],Prm->RBFS[i*2+1],Prm->RBFS[j*2+1]);
+		}
+	}
+	return SRBF;
 }
 
 static PyObject*  Make_CM_vary_coords (PyObject *self, PyObject  *args)
@@ -1222,6 +1282,8 @@ static PyMethodDef EmbMethods[] =
 	"Raster_SH method"},
 	{"Overlap_SH", Overlap_SH, METH_VARARGS,
 	"Overlap_SH method"},
+	{"Overlap_RBF", Overlap_RBF, METH_VARARGS,
+	"Overlap_RBF method"},
 	{"Project_SH", Project_SH, METH_VARARGS,
 	"Project_SH method"},
 	{"Make_PGaussian", Make_PGaussian, METH_VARARGS,

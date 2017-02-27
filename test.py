@@ -13,12 +13,13 @@ def TestBP(set_= "gdb9", dig_ = "Coulomb", BuildTrain_=True):
 		dig_: the digester string
 	"""
 	print "Testing General Behler-Parrinello using ab-initio energies...."
+	PARAMS["NormalizeOutputs"] = True
 	if (BuildTrain_):
 		a=MSet(set_)
 		a.ReadXYZ(set_)
 		TreatedAtoms = a.AtomTypes()
 		print "TreatedAtoms ", TreatedAtoms
-		d = MolDigester(TreatedAtoms, name_=dig_+"_BP", OType_="Energy")
+		d = MolDigester(TreatedAtoms, name_=dig_+"_BP", OType_="AtomizationEnergy")
 		tset = TensorMolData_BP(a,d, order_=1, num_indis_=1, type_="mol")
 		tset.BuildTrain(set_)
 	tset = TensorMolData_BP(MSet(),MolDigester([]),set_+"_"+dig_+"_BP")
@@ -42,30 +43,31 @@ def TestAlign():
 def TestGoForceAtom(dig_ = "GauSH", BuildTrain_=True, net_ = "fc_sqdiff", Train_=True):
 	"""
 	A Network trained on Go-Force
+	Args:
+		dig_ : type of digester to be used (GauSH, etc.)
 	"""
 	if (BuildTrain_):
 		print "Testing a Network learning Go-Atom Force..."
 		a=MSet("OptMols")
 		a.ReadXYZ("OptMols")
-		print "nmols:",len(a.mols)
-		c=a.DistortedClone(300,0.25) # number of distortions, displacement
-		b=a.DistortAlongNormals(30, True, 0.7)
+		if (PARAMS["RotateSet"]):
+			b = a.RotatedClone(2)
+		if (PARAMS["TransformSet"]):
+			b = a.TransformedClone(OctahedralOperations())
+		print "nmols:",len(b.mols)
+		c=b.DistortedClone(PARAMS["NDistorts"],0.25) # number of distortions, displacement
+		d=b.DistortAlongNormals(PARAMS["NModePts"], True, 0.7)
+		c.AppendSet(d)
 		c.Statistics()
-		b.Statistics()
-		print len(b.mols)
-		#b.Save()
-		# b.WriteXYZ()
-		TreatedAtoms = b.AtomTypes()
+		TreatedAtoms = c.AtomTypes()
 		# 2 - Choose Digester
-		d = Digester(TreatedAtoms, name_=dig_,OType_ ="Force")
+		d = Digester(TreatedAtoms, name_=dig_,OType_ ="GoForceSphere")
 		# 4 - Generate training set samples.
-		tset = TensorData(b,d)
+		tset = TensorData(c,d)
 		tset.BuildTrainMolwise("OptMols_NEQ",TreatedAtoms) # generates dataset numpy arrays for each atom.
-		tset2 = TensorData(c,d)
-		tset2.BuildTrainMolwise("OptMols_NEQ",TreatedAtoms,True) # generates dataset numpy arrays for each atom.
 	#Train
 	if (Train_):
-		tset = TensorData(None,None,"OptMols_NEQ_"+dig_,None,10000)
+		tset = TensorData(None,None,"OptMols_NEQ_"+dig_)
 		manager=TFManage("",tset,True, net_) # True indicates train all atoms
 	# This Tests the optimizer.
 	if (net_ == "KRR_sqdiff"):
@@ -88,9 +90,52 @@ def TestGoForceAtom(dig_ = "GauSH", BuildTrain_=True, net_ = "fc_sqdiff", Train_
 	optimizer.Opt(test_mol)
 	return
 
+def TestPotential():
+	"""
+	Makes volumetric data for looking at how potentials behave near and far from equilibrium.
+	"""
+	PARAMS["KAYBEETEE"] = 5000.0*0.000950048 # At 10*300K
+	a=MSet("OptMols")
+	a.ReadXYZ("OptMols")
+	m = a.mols[5]
+	m.Distort(0.1,0.1)
+	n = 230
+	ns = 35 # number of points to do around the atom.
+	na1 = 1 # number of points to do as the atom.
+	na2 = 2 # number of points to do as the atom.
+	grid, volume = m.SpanningGrid(n,3.0, Flatten=True, Cubic=True)
+	l0 = grid[0]
+	dl = (grid[1]-grid[0])[2]
+	vol = np.zeros((n,n,n))
+	cgrid = grid.copy()
+	cgrid = cgrid.reshape((n,n,n,3))
+	for i in range(len(m.atoms)):
+		#print m.coords[i]
+		ic = np.array((m.coords[i]-l0)/dl,dtype=np.int) # Get indices in cubic grid.
+		#print ic, cgrid[ic[0],ic[1],ic[2]]
+		subgrid = cgrid[ic[0]-ns:ic[0]+ns,ic[1]-ns:ic[1]+ns,ic[2]-ns:ic[2]+ns].copy()
+		fsubgrid = subgrid.reshape((8*ns*ns*ns,3))
+		cvol = m.POfAtomMoves(fsubgrid-m.coords[i],i)
+		#cvol -= cvol.min()
+		#cvol /= cvol.max()
+		cvol = cvol.reshape((2*ns,2*ns,2*ns))
+		vol[ic[0]-ns:ic[0]+ns,ic[1]-ns:ic[1]+ns,ic[2]-ns:ic[2]+ns] += cvol
+		vol[ic[0]-na1:ic[0]+na1,ic[1]-na1:ic[1]+na1,ic[2]-na1:ic[2]+na1] = 5.
+		vol[ic[0]-na2:ic[0]+na2,ic[1]-na2:ic[1]+na2,ic[2]-na2:ic[2]+na2] = 2.
+	#vol = m.AddPointstoMolDots(vol,grid,0.9)
+	#ipyvol can nicely visualize [nx,nx,xz] integer volume arrays.
+	vol = vol.reshape((n,n,n))
+	np.save(PARAMS["dens_dir"]+"goEn",vol)
+	exit(0)
+	return
+
+#
 # Tests to run.
-TestBP(set_="gdb9", dig_="GauInv", BuildTrain_=False)
-#TestGoForceAtom(dig_ = "GauSH", BuildTrain_=False, net_ = "fc_sqdiff", Train_=False)
+#
+
+#TestBP(set_="gdb9", dig_="GauSH", BuildTrain_= True)
+#TestGoForceAtom(dig_ = "GauSH", BuildTrain_=True, net_ = "fc_sqdiff", Train_=True)
+TestPotential()
 
 # Kun's tests.
 if (0):
