@@ -805,7 +805,110 @@ void SphereToCart(double* InOut)
 	InOut[0] = x; InOut[1] = y; InOut[2] = z;
 }
 
-void RadSHProjection_Orth(SHParams* Prm, double x, double y, double z, double* output, int natom, double fac=1.0)
+int SizeOfGauSH(SHParams* Prm)
+{
+	return (Prm->SH_NRAD)*(1+Prm->SH_LMAX)*(1+Prm->SH_LMAX);
+}
+
+void RadSHProjection_Orth(SHParams* Prm, double x, double y, double z, double* output, double fac=1.0)
+{
+	double rnotinv = sqrt(x*x+y*y+z*z);
+	double r = 1.0/rnotinv;
+	// Populate tables...
+	double x_[Prm->SH_LMAX-1];
+	double y_[Prm->SH_LMAX-1];
+	double z_[Prm->SH_LMAX-1];
+	double r_[Prm->SH_LMAX-1];
+	x_[0] = x*x;
+	y_[0] = y*y;
+	z_[0] = z*z;
+	r_[0] = r*r;
+	for (int i=2; i<(Prm->SH_LMAX-1) ; i+=2)
+	{
+		x_[i] = x_[i-2]*x*x;
+		y_[i] = y_[i-2]*y*y;
+		z_[i] = z_[i-2]*z*z;
+	}
+	for (int i=1; i<(Prm->SH_LMAX-1) ; ++i)
+	r_[i] = r_[i-1]*r;
+
+	if (r>pow(10.0,9))
+	return;
+	// double theta = acos(z/r);
+	// double theta = acos(z*r);
+	// double phi = atan2(y,x);
+	#pragma omp parallel for
+	for (int i=0; i<Prm->SH_NRAD ; ++i)
+	{
+		//cout << "Num Thread: " << omp_get_num_threads() << endl;
+		double Gv = 0;
+		for (int j=0; j<Prm->SH_NRAD ; ++j)
+			Gv += Prm->SRBF[i*(Prm->SH_NRAD)+j]*Gau(rnotinv, Prm->RBFS[j*2],Prm->RBFS[j*2+1]);
+		for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
+		{
+			for (int m=-l; m<l+1 ; ++m)
+			{
+				output[i*((Prm->SH_LMAX+1)*(Prm->SH_LMAX+1)) + (l)*(l) + m+l] += Gv*CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_)*fac;
+
+				// if ((RealSphericalHarmonic(l,m,theta,phi) - CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_))>0.0000001)
+				// 	cout << "Real vs. Cart: " << RealSphericalHarmonic(l,m,theta,phi) << " " << CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_) << endl;
+			}
+		}
+	}
+}
+
+// Projects a delta function at x,y,z onto
+//  Exp[-(x-r)^2/(2 sigma^2)]*Y_{LM}(theta,phi)
+// which will occupy a vector of length Nrad*(1+lmax)**2
+void RadSHProjection(SHParams* Prm, double x, double y, double z, double* output, double fac=1.0)
+{
+	if (Prm->SH_ORTH){
+		return RadSHProjection_Orth(Prm,  x,  y,  z,  output,  fac);
+	}
+	double rnotinv = sqrt(x*x+y*y+z*z);
+	double r = 1.0/rnotinv;
+	// Populate tables...
+	double x_[Prm->SH_LMAX-1];
+	double y_[Prm->SH_LMAX-1];
+	double z_[Prm->SH_LMAX-1];
+	double r_[Prm->SH_LMAX-1];
+	x_[0] = x*x;
+	y_[0] = y*y;
+	z_[0] = z*z;
+	r_[0] = r*r;
+	for (int i=2; i<(Prm->SH_LMAX-1) ; i+=2)
+	{
+		x_[i] = x_[i-2]*x*x;
+		y_[i] = y_[i-2]*y*y;
+		z_[i] = z_[i-2]*z*z;
+	}
+	for (int i=1; i<(Prm->SH_LMAX-1) ; ++i)
+	r_[i] = r_[i-1]*r;
+
+	if (r>pow(10.0,9))
+	return;
+	// double theta = acos(z/r);
+	// double theta = acos(z*r);
+	// double phi = atan2(y,x);
+	#pragma omp parallel for
+	for (int i=0; i<Prm->SH_NRAD ; ++i)
+	{
+		//cout << "Num Thread: " << omp_get_num_threads() << endl;
+		double Gv = Gau(rnotinv, Prm->RBFS[i*2],Prm->RBFS[i*2+1]);
+		for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
+		{
+			for (int m=-l; m<l+1 ; ++m)
+			{
+				output[i*((Prm->SH_LMAX+1)*(Prm->SH_LMAX+1)) + (l)*(l) + m+l] += Gv*CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_)*fac;
+
+				// if ((RealSphericalHarmonic(l,m,theta,phi) - CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_))>0.0000001)
+				// 	cout << "Real vs. Cart: " << RealSphericalHarmonic(l,m,theta,phi) << " " << CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_) << endl;
+			}
+		}
+	}
+}
+
+void RadSHProjection_Orth_EleUniq(SHParams* Prm, double x, double y, double z, double* output, int ele, double fac=1.0)
 {
 	double rnotinv = sqrt(x*x+y*y+z*z);
 	double r = 1.0/rnotinv;
@@ -839,57 +942,6 @@ void RadSHProjection_Orth(SHParams* Prm, double x, double y, double z, double* o
 		double Gv = 0;
 		for (int j=0; j<Prm->SH_NRAD ; ++j)
 		Gv += Prm->SRBF[i*(Prm->SH_NRAD)+j]*Gau(rnotinv, Prm->RBFS[j*2],Prm->RBFS[j*2+1]);
-		for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
-		{
-			for (int m=-l; m<l+1 ; ++m)
-			{
-				output[i*((Prm->SH_LMAX+1)*(Prm->SH_LMAX+1)) + (l)*(l) + m+l] += Gv*CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_)*fac;
-
-				// if ((RealSphericalHarmonic(l,m,theta,phi) - CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_))>0.0000001)
-				// 	cout << "Real vs. Cart: " << RealSphericalHarmonic(l,m,theta,phi) << " " << CartSphericalHarmonic(l,m,x,y,z,r,x_,y_,z_,r_) << endl;
-			}
-		}
-	}
-}
-
-// Projects a delta function at x,y,z onto
-//  Exp[-(x-r)^2/(2 sigma^2)]*Y_{LM}(theta,phi)
-// which will occupy a vector of length Nrad*(1+lmax)**2
-void RadSHProjection(SHParams* Prm, double x, double y, double z, double* output, int natom, double fac=1.0)
-{
-	if (Prm->SH_ORTH){
-		return RadSHProjection_Orth(Prm,  x,  y,  z,  output,  natom,  fac);
-	}
-	double rnotinv = sqrt(x*x+y*y+z*z);
-	double r = 1.0/rnotinv;
-	// Populate tables...
-	double x_[Prm->SH_LMAX-1];
-	double y_[Prm->SH_LMAX-1];
-	double z_[Prm->SH_LMAX-1];
-	double r_[Prm->SH_LMAX-1];
-	x_[0] = x*x;
-	y_[0] = y*y;
-	z_[0] = z*z;
-	r_[0] = r*r;
-	for (int i=2; i<(Prm->SH_LMAX-1) ; i+=2)
-	{
-		x_[i] = x_[i-2]*x*x;
-		y_[i] = y_[i-2]*y*y;
-		z_[i] = z_[i-2]*z*z;
-	}
-	for (int i=1; i<(Prm->SH_LMAX-1) ; ++i)
-	r_[i] = r_[i-1]*r;
-
-	if (r>pow(10.0,9))
-	return;
-	// double theta = acos(z/r);
-	// double theta = acos(z*r);
-	// double phi = atan2(y,x);
-	#pragma omp parallel for
-	for (int i=0; i<Prm->SH_NRAD ; ++i)
-	{
-		//cout << "Num Thread: " << omp_get_num_threads() << endl;
-		double Gv = Gau(rnotinv, Prm->RBFS[i*2],Prm->RBFS[i*2+1]);
 		for (int l=0; l<Prm->SH_LMAX+1 ; ++l)
 		{
 			for (int m=-l; m<l+1 ; ++m)
@@ -972,4 +1024,65 @@ void RadInvProjection(SHParams* Prm, double x, double y, double z, double* outpu
 			++op;
 		}
 	}
+}
+
+// Obtain the Gau-SH version of a given linear transformation.
+// This is done by dumping the SH onto a grid centered at zero, and transformed grid, and taking the inner product.
+void TransInSHBasis(SHParams* Prm, double* t, double* out)
+{
+	 double x0 = -20.;
+	 double dx = 0.2;
+	 int n = 200;
+	 int ng = n*n*n;
+	 double* grid = new double[ng*3];
+	 double* tgrid = new double[ng*3];
+	 int dim = SizeOfGauSH(Prm);
+	 double* BFS = new double[dim*ng];
+	 double* tBFS = new double[dim*ng];
+	 int l = 0;
+	 #pragma omp parallel for
+	 for (int i=0; i<n;++i)
+	 {
+		 for (int j=0; j<n;++j)
+		 {
+			 for (int k=0; k<n;++k)
+			 {
+				 grid[l*3] = x0+i*dx;
+				 grid[l*3+1] = x0+j*dx;
+				 grid[l*3+2] = x0+k*dx;
+				 tgrid[l*3] = t[0]*grid[l*3]+t[1]*grid[l*3+1]+t[2]*grid[l*3+2];
+				 tgrid[l*3+1] = t[3]*grid[l*3]+t[4]*grid[l*3+1]+t[5]*grid[l*3+2];
+				 tgrid[l*3+2] = t[6]*grid[l*3]+t[7]*grid[l*3+1]+t[8]*grid[l*3+2];
+				 ++l;
+			 }
+			}
+		}
+
+		// Dump the orbitals onto the grids using RadSHProjection.
+		#pragma omp parallel for
+	  for (int i =0; i<ng; ++i)
+		{
+			RadSHProjection(Prm,grid[i*3],grid[i*3+1],grid[i*3+2], BFS + i*dim);
+			RadSHProjection(Prm,tgrid[i*3],tgrid[i*3+1],tgrid[i*3+2], tBFS + i*dim);
+		}
+		// Now note that BFS is a grid X SH matrix. calculate norms. etc.
+		double OrigIntegral=0.;
+		double TransIntegral=0.;
+		for (int o=0; o<dim; ++o)
+		{
+			for (int i =0; i<ng; ++i)
+			{
+				OrigIntegral += BFS[i*dim+o]*BFS[i*dim+o];
+				TransIntegral += tBFS[i*dim+o]*tBFS[i*dim+o];
+			}
+			cout << o << endl;
+			cout << "Original Integral " << OrigIntegral << " :: " << OrigIntegral*(dx*dx*dx) << endl;
+			cout << "TransIntegral " << TransIntegral << " :: " << TransIntegral*(dx*dx*dx) << endl;
+			OrigIntegral=0.;
+			TransIntegral=0.;
+		}
+		// Finally create the transformation matrix
+
+	 delete [] grid;
+	 delete [] tgrid;
 }
