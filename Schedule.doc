@@ -7,3 +7,8 @@ Run the testBP for the first(original task)(it may take more than 5 hours and I 
 There are one questions about the original 
 #NolmalizationInput and NolmalizationOutput, I change both of them to False and I know from its name that should be something about normalization but do not know how the results can differ.
 
+2017.3.8
+change the parameter in TMParams.py and run the BP in test.py.
+try to understand things about deep Neural Networks.
+Have two papers to read,
+one is from an old deep convolutional imagenet classification paper, the other one is in 2016, the champion paper of imagenet classification named Deep residual learning for image recognition.
