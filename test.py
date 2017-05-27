@@ -754,30 +754,8 @@ def TestEE():
 	return
 
 
-#
-# Tests to run.
-#
-
-#TestBP(set_="gdb9", dig_="GauSH", BuildTrain_= True)
-#TestANI1()
-#TestBP_WithGrad()
-#Test_ULJ()
-Test_LJMD()
-#TestDipole()
-#TestJohnson()
-#TestMorphIR()
-#TestGeneralMBEandMolGraph()
-#TestGoForceAtom(dig_ = "GauSH", BuildTrain_=True, net_ = "fc_sqdiff", Train_=True)
-#TestPotential()
-#TestIpecac()
-#TestHerrNet1()
-#TestOCSDB()
-#TestNeb()
-#TestMD()
-#TestNebGLBFGS() # Not working... for some reason.. I'll try DIIS next.
-
-# This visualizes the go potential and projections on to basis vectors.
-if (0):
+def TestGoVisualize():
+	# This visualizes the go potential and projections on to basis vectors.
 	a=MSet("OptMols")
 	a.Load()
 	m = a.mols[0]
@@ -801,8 +779,11 @@ if (0):
 		optimizer  = Optimizer(None)
 		optimizer.GoOptProb(m) # This works perfectly.
 
-# This draws test volumes for Morphine
-if (0):
+	return
+
+
+def TestDrawVolumes():
+	# This draws test volumes for Morphine
 	a=MSet("OptMols")
 	a.Load()
 	test_mol = a.mols[0]
@@ -812,3 +793,28 @@ if (0):
 	grids = test_mol.AddPointstoMolDots(grids, xyz, p)
 	np.savetxt("./densities/morph.xyz",test_mol.coords)
 	GridstoRaw(grids,250,"Morphine")
+
+	return
+
+
+if __name__ == '__main__':
+
+	#TestBP(set_="gdb9", dig_="GauSH", BuildTrain_= True)
+	#TestANI1()
+	#TestBP_WithGrad()
+	#Test_ULJ()
+	Test_LJMD()
+	#TestDipole()
+	#TestJohnson()
+	#TestMorphIR()
+	#TestGeneralMBEandMolGraph()
+	#TestGoForceAtom(dig_ = "GauSH", BuildTrain_=True, net_ = "fc_sqdiff", Train_=True)
+	#TestPotential()
+	#TestIpecac()
+	#TestHerrNet1()
+	#TestOCSDB()
+	#TestNeb()
+	#TestMD()
+	#TestNebGLBFGS() # Not working... for some reason.. I'll try DIIS next.
+	# TestGoVisualize()
+	# TestDrawVolumes()
