@@ -2,11 +2,13 @@
 Changes that need to be made:
 """
 
-from Sets import *
-from TFManage import *
-from DIIS import *
 import random
 import time
+
+from .DIIS import *
+from .Sets import *
+from .TFManage import *
+
 
 class NudgedElasticBand:
 	def __init__(self,tfm_,g0_,g1_):

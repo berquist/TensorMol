@@ -1,17 +1,17 @@
+from __future__ import division
+from __future__ import print_function
+
 """
 	These instances work directly on raw coordinate, atomic number data.
 	They either generate their own descriptor or physical model.
 	They are also simplified relative to the usual MolInstance.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from .TFInstance import *
+from .TensorMolData import *
+from .TFMolInstance import *
+from .ElectrostaticsTF import *
 
-from TensorMol.TFInstance import *
-from TensorMol.TensorMolData import *
-from TensorMol.TFMolInstance import *
-from TensorMol.ElectrostaticsTF import *
 
 class MolInstance_LJForce(MolInstance_fc_sqdiff_BP):
 	"""

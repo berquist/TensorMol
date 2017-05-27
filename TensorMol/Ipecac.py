@@ -4,12 +4,13 @@
  Ie: it's the inverse of Digest.py
 """
 
-from Mol import *
-from Util import *
 import os, sys, re, random, math, copy, itertools
 import numpy as np
 import cPickle as pickle
-import LinearOperations, DigestMol, Digest, Opt
+
+from .Mol import *
+from .Util import *
+from . import LinearOperations, DigestMol, Digest, Opt
 
 def EmbAtomwiseErr(mol_,dig_,emb_):
 	ins = dig_.TrainDigestMolwise(mol_,MakeOutputs_=False)

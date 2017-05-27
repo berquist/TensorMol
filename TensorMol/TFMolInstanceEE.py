@@ -1,11 +1,10 @@
-from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from TensorMol.TFInstance import *
-from TensorMol.TensorMolData import *
-from TensorMol.TFMolInstance import *
-from TensorMol.ElectrostaticsTF import *
+# from .Data import *
+from .ElectrostaticsTF import *
+from .TFInstance import *
+from .TFMolInstance import *
 
 class MolInstance_EE(MolInstance_fc_sqdiff_BP):
 	"""

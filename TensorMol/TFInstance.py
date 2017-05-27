@@ -1,19 +1,22 @@
+from __future__ import division
+from __future__ import print_function
+
 """
 For the sake of modularity, all direct access to dig
 needs to be phased out...
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from TensorMol.TensorData import *
 import numpy as np
 import cPickle as pickle
 import math
 import time, os, sys
 import os.path
+
+from .Util import HAS_TF
 if (HAS_TF):
 	import tensorflow as tf
+from .TensorData import *
+
 
 class Instance:
 	"""

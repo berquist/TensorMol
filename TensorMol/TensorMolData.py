@@ -7,9 +7,9 @@
 #
 #
 import os, gc
-from Sets import *
-from DigestMol import *
-from TensorData import *
+from .Sets import *
+from .DigestMol import *
+from .TensorData import *
 #import tables should go to hdf5 soon...
 
 class TensorMolData(TensorData):

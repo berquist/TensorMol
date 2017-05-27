@@ -1,10 +1,10 @@
-from Util import *
-from Sets import *
-from TensorMolData import *
-from TFMolManage import *
-from MolDigest import *
-from NN_MBE import *
-from NN_Opt import *
+from TensorMol.Util import *
+from TensorMol.Sets import *
+from TensorMol.TensorMolData import *
+from TensorMol.TFMolManage import *
+from TensorMol.MolDigest import *
+from TensorMol.NN_MBE import *
+from TensorMol.NN_Opt import *
 
 # John's tests
 if (1):
@@ -55,8 +55,8 @@ if (0):
 		#a=MSet("CxHy_test_NEQ")
 		#a.Load()
 		a=MSet("gdb9_1_6_NEQ")
-	  	#a=a.DistortedClone(1)	
-		a.Load()	
+	  	#a=a.DistortedClone(1)
+		a.Load()
 		# Choose allowed atoms.
 		TreatedAtoms = a.AtomTypes()
 		#for mol in a.mols:
@@ -76,11 +76,9 @@ if (0):
 
 	if (1):
 		tset = TensorData(MSet(),Digester([]),"gdb9_1_6_NEQ_PGaussian")
-		#tset_test = TensorData(MSet(),Digester([]),"CxHy_test_SymFunc") 
+		#tset_test = TensorData(MSet(),Digester([]),"CxHy_test_SymFunc")
 		#manager=TFManage("",tset,False,"fc_sqdiff", tset_test) # True indicates train all atoms.
 		manager=TFManage("",tset,False,"fc_sqdiff")
 		manager.TrainElement(6)
 		#tset = TensorData(MSet(),Digester([]),"gdb9_1_6_NEQ_SymFunc")
 		#manager = TFManage("", tset , True)
-	
-

@@ -1,8 +1,9 @@
-from Mol import *
-from Util import *
 import numpy,os,sys,re
 import cPickle as pickle
-import LinearOperations
+
+from .Mol import *
+from .Util import *
+
 
 class Transformer:
 	"""

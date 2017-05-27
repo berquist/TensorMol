@@ -1,18 +1,20 @@
-from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from TensorMol.TFInstance import *
-from TensorMol.TensorMolData import *
-import numpy as np
 import cPickle as pickle
+import os
+import sys
 import math
 import time
 import os.path
+import numpy as np
+
+from .Util import HAS_TF
 if (HAS_TF):
 	import tensorflow as tf
-import os
-import sys
+
+from .TFInstance import *
+# from .Data import *
 
 #
 # These work Moleculewise the versions without the mol prefix work atomwise.
@@ -663,7 +665,7 @@ class MolInstance_fc_sqdiff_BP(MolInstance_fc_sqdiff):
 		num_of_mols = 0
 		for ministep in range (0, int(Ncase_train/self.batch_size)):
 			#print ("ministep: ", ministep, " Ncase_train:", Ncase_train, " self.batch_size", self.batch_size)
-			batch_data = self.TData.GetTrainBatch(self.batch_size,self.batch_size_output)			
+			batch_data = self.TData.GetTrainBatch(self.batch_size,self.batch_size_output)
 			actual_mols  = np.count_nonzero(batch_data[2])
 			dump_, dump_2, total_loss_value, loss_value, mol_output = self.sess.run([self.check, self.train_op, self.total_loss, self.loss, self.output], feed_dict=self.fill_feed_dict(batch_data))
 			train_loss = train_loss + loss_value

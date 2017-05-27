@@ -3,8 +3,8 @@
  TODO: Should inherit from Digest.py (which needs cleanup)
 """
 
-from Mol import *
-from Util import *
+from .Mol import *
+from .Util import *
 
 class MolDigester:
 	def __init__(self, eles_, name_="Coulomb", OType_="FragEnergy", SensRadius_=6):

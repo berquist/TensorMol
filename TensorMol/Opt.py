@@ -1,11 +1,13 @@
-from Sets import *
-from TFManage import *
-from QuasiNewtonTools import *
-from DIIS import *
-from BFGS import *
-from LinearOperations import *
 import random
 import time
+
+from .Sets import *
+from .TFManage import *
+from .QuasiNewtonTools import *
+from .DIIS import *
+from .BFGS import *
+from .LinearOperations import *
+
 
 class Optimizer:
 	def __init__(self,tfm_):
@@ -238,7 +240,7 @@ class Optimizer:
 		"""
 		Optimize using force output of an atomwise network.
 		now also averages over rotations...
-		
+
 		Args:
 		        m: A distorted molecule to optimize
 		"""

@@ -5,7 +5,9 @@ Loads and handles basis sets for embeddings
 import os, sys, re, random, math, copy
 import numpy as np
 import cPickle as pickle
-import LinearOperations, DigestMol, Digest, Opt, Ipecac
+
+from . import LinearOperations, DigestMol, Digest, Opt, Ipecac
+
 
 class Basis:
 	def __init__(self, Name_ = None):
@@ -40,7 +42,7 @@ class Basis_GauSH(Basis):
 		return
 
 	def Orthogonalize(self):
-		from TensorMol.LinearOperations import MatrixPower
+		from .LinearOperations import MatrixPower
 		S_Rad = MolEmb.Overlap_RBFS(PARAMS, self.RBFS)
 		self.SRBF = np.zeros((self.RBFS.shape[0],PARAMS["SH_NRAD"],PARAMS["SH_NRAD"]))
 		for i in range(S_Rad.shape[0]):

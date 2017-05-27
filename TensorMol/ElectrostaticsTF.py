@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+
 """
 This file contains routines for calculating electrostatic energies and forces
 using tensorflow. No training etc. These functions are used as a utility in
@@ -5,15 +8,16 @@ other Instance models. Some of these functions mirror Electrostatics.py
 
 Position units are Bohr, and energy units are Hartree
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from TensorMol.TensorData import *
-import numpy as np
+
 import cPickle as pickle
 import math, time, os, sys, os.path
+import numpy as np
+
+from .Util import HAS_TF
 if (HAS_TF):
 	import tensorflow as tf
+from .TensorData import *
+
 
 def TFDistance(A):
 	"""

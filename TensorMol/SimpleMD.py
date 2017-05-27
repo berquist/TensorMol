@@ -3,10 +3,10 @@ The Units chosen are Angstrom * Fs.
 I convert the force outside from kcal/(mol angstrom) to Joules/(mol angstrom)
 """
 
-from Sets import *
-from TFManage import *
-from Electrostatics import *
-from QuasiNewtonTools import *
+from .Electrostatics import *
+from .QuasiNewtonTools import *
+from .Sets import *
+from .TFManage import *
 
 def VelocityVerletstep(f_, a_, x_, v_, m_, dt_, fande_=None):
 	"""

@@ -1,7 +1,7 @@
-from Sets import *
-from TFManage import *
-from PhysicalData import *
-from QuasiNewtonTools import *
+from .Sets import *
+from .TFManage import *
+from .PhysicalData import *
+from .QuasiNewtonTools import *
 
 class BFGS:
 	def __init__(self, m_, ForceAndEnergy_):

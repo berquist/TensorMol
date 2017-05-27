@@ -1,10 +1,13 @@
 """
  Either trains, tests, evaluates or provides an interface for optimization.
 """
-from TensorData import *
-from TFInstance import *
+
 import numpy as np
 import gc
+
+from .TensorData import *
+from .TFInstance import *
+
 
 class TFManage:
 	"""

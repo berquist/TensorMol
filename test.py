@@ -2,9 +2,12 @@
 Various tests of tensormol's functionality.
 Many of these tests take a pretty significant amount of time and memory to complete.
 """
-from TensorMol import *
+
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
+
+from TensorMol import *
+
 
 # John's tests
 def TestBP(set_= "gdb9", dig_ = "Coulomb",BuildTrain_ =False):
@@ -555,7 +558,7 @@ def Test_LJMD():
 	"""
 	a=MSet("Test")
 	MakeUniform([0.0,0.0,0.0],1.0,4)
-	a.mols=[Mol.Mol(np.ones(512),MakeUniform([0.0,0.0,0.0],4.0,8))]
+	a.mols=[Mol(np.ones(512),MakeUniform([0.0,0.0,0.0],4.0,8))]
 	m = a.mols[0]
 	TreatedAtoms = a.AtomTypes()
 	d = MolDigester(TreatedAtoms, name_="CZ", OType_ ="Force")
@@ -563,8 +566,8 @@ def Test_LJMD():
 	ins = MolInstance_LJForce(tset)
 	ins.train_prepare()
 	# Convert from hartree/ang to joules/mol ang.
-	ForceField = lambda x: ins.EvalForce(Mol.Mol(m.atoms,x))[1]
-	EnergyForceField = lambda x: ins.EvalForce(Mol.Mol(m.atoms,x))
+	ForceField = lambda x: ins.EvalForce(Mol(m.atoms,x))[1]
+	EnergyForceField = lambda x: ins.EvalForce(Mol(m.atoms,x))
 	PARAMS["MDTemp"] = 300.0
 	PARAMS["MDThermostat"] = None
 	PARAMS["MDV0"] = None

@@ -3,9 +3,9 @@
  Combining a dataset, sampler and an embedding. (CM etc.)
 """
 import os, gc
-from Sets import *
-from Digest import *
-from Transformer import *
+from .Sets import *
+from .Digest import *
+from .Transformer import *
 #import tables should go to hdf5 soon...
 
 class TensorData():

@@ -1,8 +1,10 @@
-from Util import *
 import numpy as np
 import random, math
-from Mol import *
-from PhysicalData import *
+
+from .Util import *
+from .Mol import *
+from .PhysicalData import *
+
 
 class MolGraph:
 	def __init__(self, mol_, bond_length_thresh_ =  None):
@@ -21,7 +23,7 @@ class MolGraph:
 		self.nx_mol_graph = None
 		self.shortest_path = None
 		if not bond_length_thresh_:
-			self.bond_length_thresh = bond_length_thresh 
+			self.bond_length_thresh = bond_length_thresh
 		self.Make_Mol_Graph(mol_)
 		return
 

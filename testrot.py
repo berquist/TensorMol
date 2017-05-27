@@ -1,8 +1,8 @@
-from Util import * 
-from Mol import * 
-from Sets import *
-from Digest import *
-from pyscf import gto
+from TensorMol.Mol import Mol
+# from Util import *
+# from Mol import *
+# from Sets import *
+# from TensorMol.Digest import *
 
 ch3xyz = """
 7
@@ -16,8 +16,8 @@ O         -1.06851       -0.15371        3.19215
 N         -2.06851       -3.05371        3.19215
 """
 
-# place our embedding at the central C atom. 
-# rotate the molecule and test the resulting embedding. 
+# place our embedding at the central C atom.
+# rotate the molecule and test the resulting embedding.
 m=Mol()
 m.FromXYZString(ch3xyz)
 m.Distort()
@@ -54,11 +54,9 @@ if (1):
 
 	print "emb diff:",eins[2*ncase]-i1
 	print "out diff:",eouts[2*ncase]-o1
-	
+
 	print "emb diff:",eins[2*ncase] - ins[0]
 	print "out diff:",eouts[2*ncase] - outs[0]
 
 	print "Expanded 1:",eins,eouts
 	print "Expanded 1:",ins,outs
-
-

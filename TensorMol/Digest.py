@@ -1,9 +1,9 @@
-from Mol import *
-from Util import *
 import os,sys,re
 import numpy as np
 import cPickle as pickle
-import LinearOperations
+
+from .Mol import *
+from .Util import *
 if (HAS_EMB):
 	import MolEmb
 

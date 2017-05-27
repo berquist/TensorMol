@@ -5,7 +5,7 @@ Changes that need to be made:
  - This needs to be a child of the ordinary optimizer class.
 """
 
-from NN_MBE import *
+from .NN_MBE import *
 
 class MBE_Optimizer:
     def __init__(self,nn_mbe_):

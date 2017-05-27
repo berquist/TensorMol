@@ -1,5 +1,5 @@
-from Sets import *
-from TFManage import *
+from .Sets import *
+from .TFManage import *
 
 class DIIS:
 	def __init__(self):

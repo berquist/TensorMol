@@ -3,14 +3,16 @@
  This file contains routines to optimize an embedding
 """
 
-from Mol import *
-from Util import *
-from TensorData import *
-from TFInstance import *
 import os, sys, re, random, math, copy
 import numpy as np
 import cPickle as pickle
-import LinearOperations, DigestMol, Digest, Opt, Ipecac
+
+from . import LinearOperations, DigestMol, Digest, Opt, Ipecac
+from .Mol import *
+from .Util import *
+from .TensorData import *
+from .TFInstance import *
+
 
 class EmbeddingOptimizer:
 	"""

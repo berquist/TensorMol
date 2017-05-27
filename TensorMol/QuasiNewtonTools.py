@@ -2,9 +2,9 @@
 Routines which help do differential analysis and Newtonian Mechanics
 """
 
-from Sets import *
-from TFManage import *
-from PhysicalData import *
+from .Sets import *
+from .TFManage import *
+from .PhysicalData import *
 
 def RmsForce(f_):
 	return np.sum(np.linalg.norm(f_,axis=1))/f_.shape[0]

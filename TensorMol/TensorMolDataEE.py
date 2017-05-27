@@ -7,9 +7,9 @@
 #
 #
 import os, gc
-from Sets import *
-from DigestMol import *
-from TensorMolData import *
+from .Sets import *
+from .DigestMol import *
+from .TensorMolData import *
 
 
 class TensorMolData_BP_Multipole(TensorMolData_BP):

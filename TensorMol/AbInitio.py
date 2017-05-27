@@ -1,10 +1,11 @@
 """
 Routines for running external Ab-Initio packages to get shit out of mol.py
 """
-from Util import *
+
 import numpy as np
 import random, math, subprocess
-import Mol
+
+from .Util import *
 
 def PyscfDft(m_,basis_ = '6-31g*',xc_='b3lyp'):
 	if (not HAS_PYSCF):

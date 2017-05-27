@@ -4,11 +4,15 @@ The manager will now direct the training set to generate batches
 and manage a random queue to accept those batches.
  THIS WHOLE THING IS BASICALLY NOT WORKING AND UNAPPROACHED
 """
-from TFManage import *
-from TensorMolData import *
-from TFMolInstance import *
-import numpy as np
+
 import gc
+import numpy as np
+
+from .TFMolManage import TFMolManage
+from .TFManage import *
+from .TensorMolData import *
+from .TFMolInstance import *
+
 
 class TFMolQManage(TFMolManage):
 	"""

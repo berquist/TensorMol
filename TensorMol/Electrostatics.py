@@ -3,10 +3,11 @@ Routines for calculating dipoles quadropoles, etc, and cutoff electrostatic ener
 See also: ElectrostaticsTF for tensorflow implementations of electrostatics.
 """
 
-from Util import *
 import numpy as np
 import random, math
-import PhysicalData, MolEmb
+
+import MolEmb
+from .Util import *
 
 def WeightedCoordAverage(x_, q_, center_=None):
 	""" Dipole relative to center of x_ """

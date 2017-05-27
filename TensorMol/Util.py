@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
@@ -6,13 +5,10 @@ import numpy as np
 import cPickle as pickle
 import gc, random, os, sys, re, atexit
 import math, time, itertools, warnings
-from math import pi as Pi
-import scipy.special
-from scipy.weave import inline
-#from collections import defaultdict
-#from collections import Counter
-from TensorMol.TMParams import *
-from TensorMol.PhysicalData import *
+from scipy.special import erf
+
+from .TMParams import *
+from .PhysicalData import *
 
 warnings.simplefilter(action = "ignore", category = FutureWarning)
 #
@@ -40,10 +36,7 @@ Qchem_RIMP2_Block = "$rem\n   jobtype   sp\n   method   rimp2\n   MAX_SCF_CYCLES
 TMBanner()
 LOGGER.info("Searching for Installed Optional Packages...")
 try:
-	from pyscf import scf
-	from pyscf import gto
-	from pyscf import dft
-	from pyscf import mp
+	import pyscf
 	HAS_PYSCF = True
 	LOGGER.debug("Pyscf has been found")
 except Exception as Ex:
@@ -55,7 +48,7 @@ try:
 	HAS_EMB = True
 	LOGGER.debug("MolEmb has been found, Orthogonalizing Radial Basis.")
 	S = MolEmb.Overlap_SH(PARAMS)
-	from TensorMol.LinearOperations import MatrixPower
+	from .LinearOperations import MatrixPower
 	SOrth = MatrixPower(S,-1./2)
 	PARAMS["GauSHSm12"] = SOrth
 	S_Rad = MolEmb.Overlap_RBF(PARAMS)
@@ -148,7 +141,7 @@ def LtoS(l):
 	return s
 
 def ErfSoftCut(dist, width, x):
-	return (1-scipy.special.erf(1.0/width*(x-dist)))/2.0
+	return (1-erf(1.0/width*(x-dist)))/2.0
 
 def CosSoftCut(dist, x):
 	if x > dist:

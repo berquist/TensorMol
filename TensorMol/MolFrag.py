@@ -1,10 +1,12 @@
 """
 Kun: please move your work to this separate file to keep stuff organized.
 """
-from Util import *
+
 import numpy as np
 import random, math
-from Mol import *
+
+from .Util import *
+from .Mol import *
 
 
 class FragableCluster(Mol):
@@ -705,7 +707,7 @@ class FragableClusterBF(Mol):
 		self.mbe_energy=dict()   # sum of MBE energy up to order N, dic['N'=E_sum]
 		self.frag_energy_sum = dict() # sum of the energis of all the frags in certain oder
 		self.mbe_deri =None
-		self.frag_dipole_sum = dict() 
+		self.frag_dipole_sum = dict()
 		self.mbe_dipole=dict()
 		self.nn_dipole = 0
 		return
@@ -715,7 +717,7 @@ class FragableClusterBF(Mol):
 		self.mbe_frags_energy=dict()  # MBE energy of each order N, dic['N'= E_N]
 		self.energy=None
 		self.mbe_energy=dict()   # sum of MBE energy up to order N, dic['N'=E_sum]
-		self.frag_energy_sum = dict() 
+		self.frag_energy_sum = dict()
 		self.mbe_deri =None
 		self.nn_energy=None
 		return
@@ -811,13 +813,13 @@ class FragableClusterBF(Mol):
 			self.mbe_energy[order] = self.frag_energy_sum[order]
 			if order == 1:
 				self.nn_energy += self.mbe_energy[order]
-				continue 
+				continue
 			for sub_order in range (1, order):
 				self.mbe_energy[order] -= nCr(mono_num-sub_order, order-sub_order)*self.mbe_energy[sub_order]
-			self.nn_energy += self.mbe_energy[order]	
+			self.nn_energy += self.mbe_energy[order]
 		print self.mbe_energy, self.nn_energy
-		return 
-					
+		return
+
 
         def MBE_Dipole(self):
                 mono_num = len(self.mbe_frags[1])
@@ -832,4 +834,3 @@ class FragableClusterBF(Mol):
                         self.nn_dipole += self.mbe_dipole[order]
                 print self.mbe_dipole, self.nn_dipole
                 return
-

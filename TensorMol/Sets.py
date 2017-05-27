@@ -1,13 +1,14 @@
 #
 # A molecule set is not a training set.
 #
-from Mol import *
-from MolGraph import *
-from Util import *
-from MolFrag import *
 import numpy as np
 import os,sys,re,copy,time
 import cPickle as pickle
+
+from .Mol import *
+from .MolFrag import *
+from .MolGraph import *
+from .Util import *
 
 class MSet:
 	""" A molecular database which

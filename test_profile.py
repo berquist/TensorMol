@@ -1,13 +1,13 @@
-from Util import *
-from Sets import *
-from TensorData import *
-from TFManage import *
-from Opt import *
+from TensorMol.Util import *
+from TensorMol.Sets import *
+from TensorMol.TensorData import *
+from TensorMol.TFManage import *
+from TensorMol.Opt import *
 import cProfile, pstats, StringIO
 pr = cProfile.Profile()
 
 # 1 - Get molecules into memory
-a=MSet("gdb9")
+a = FragableMSet("gdb9")
 a.ReadGDB9Unpacked()
 a.Save()
 b=a.DistortedClone()

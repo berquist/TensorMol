@@ -1,8 +1,9 @@
-from Util import *
 import numpy as np
 import random, math
-import MolEmb, Electrostatics
-from LinearOperations import *
+
+import MolEmb
+from .LinearOperations import *
+from .Util import *
 
 class Mol:
 	""" Provides a general purpose molecule"""

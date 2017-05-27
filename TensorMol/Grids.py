@@ -1,10 +1,11 @@
-import numpy as np
-import random
-from pyscf import scf
-from pyscf import gto
-from pyscf import dft
 import math
-from math import pi as Pi
+import random
+import numpy as np
+
+from .Util import HAS_PYSCF
+if HAS_PYSCF:
+	from pyscf import gto
+from .Util import HAS_GRIDS
 
 #
 # The H@0 atom is for fitting the potential near equilibrium and it's small...

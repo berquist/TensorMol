@@ -2,9 +2,9 @@
 # Optimization algorithms
 #
 
-from Sets import *
-from TFMolManage import *
-from Mol import *
+from .Mol import *
+from .Sets import *
+from .TFMolManage import *
 
 class NN_MBE:
 	def __init__(self,tfm_=None):
@@ -13,11 +13,11 @@ class NN_MBE:
 			for order in tfm_:
 				print tfm_[order]
 				self.nn_mbe[order] = TFMolManage(tfm_[order], None, False)
-		return 
+		return
 
 
 	def NN_Energy(self, mol):
-		mol.Generate_All_MBE_term(atom_group=3, cutoff=6, center_atom=0)  # one needs to change the variable here 
+		mol.Generate_All_MBE_term(atom_group=3, cutoff=6, center_atom=0)  # one needs to change the variable here
 		nn_energy = 0.0
 		for i in range (1, mol.mbe_order+1):
 			nn_energy += self.nn_mbe[i].Eval_Mol(mol)
@@ -26,7 +26,7 @@ class NN_MBE:
 		print "coords of mol:", mol.coords
 		print "force of mol:", mol.properties["mbe_deri"]
 		print "energy of mol:", nn_energy
-		return 
+		return
 
 
 class NN_MBE_BF:
@@ -59,7 +59,6 @@ class NN_MBE_BF:
                 for order in range (1, self.mbe_order+1):
                         mol.frag_dipole_sum[order] = np.sum(dipoles[pointer:pointer+len(mol.mbe_frags[order])], axis=0)
                         pointer += len(mol.mbe_frags[order])
-		#print "mol.frag_dipole_sum[order] ", mol.frag_dipole_sum 
+		#print "mol.frag_dipole_sum[order] ", mol.frag_dipole_sum
 		mol.MBE_Dipole()
                 return
-

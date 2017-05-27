@@ -2,12 +2,12 @@
 # These work Moleculewise the versions without the mol prefix work atomwise.
 # but otherwise the behavior of these is the same as TFManage etc.
 #
-from TFManage import *
-from TensorMolData import *
-from TFMolInstance import *
-from TFMolInstanceEE import *
-from TFMolInstanceDirect import *
-from QuasiNewtonTools import *
+from .TFManage import *
+from .TensorMolData import *
+from .TFMolInstance import *
+from .TFMolInstanceEE import *
+from .TFMolInstanceDirect import *
+from .QuasiNewtonTools import *
 
 import numpy as np
 import gc
@@ -45,7 +45,7 @@ class TFMolManage(TFManage):
 	def Train(self, maxstep=3000):
 		"""
 		Instantiates and trains a Molecular network.
-		
+
 		Args:
 			maxstep: The number of training steps.
 		"""
