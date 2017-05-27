@@ -23,7 +23,7 @@ By using this software you agree to the terms in COPYING
 ### Acknowledgements:
  - Google Inc. (for TensorFlow)
  - NVidia Corp. (hardware)
- - Vol Lillenfeld Group (for GBD9)
+ - Vol Lillienfeld Group (for GDB9)
  - Chan Group (for PySCF)
 
 ### Installation:

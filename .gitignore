@@ -2,6 +2,7 @@
 *.npy
 datasets
 *.dat
+*.html
 *.tdt
 *.tfn
 *.tfm
